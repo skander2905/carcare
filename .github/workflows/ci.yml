@@ -1,0 +1,156 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# A new push to the same branch supersedes the previous run.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '24'
+  PNPM_VERSION: '10.11.0'
+
+jobs:
+  # -------------------------------------------------------------------------
+  # Static quality gates. Fast, no services, runs on every push.
+  # -------------------------------------------------------------------------
+  quality:
+    name: Lint, types & unit tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The client is gitignored, so it must be generated before anything
+      # typechecks or compiles.
+      - name: Generate Prisma client
+        run: pnpm --filter @carcare/backend exec prisma generate
+
+      - name: Check formatting
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+  # -------------------------------------------------------------------------
+  # Integration tests against real PostgreSQL and Redis. An in-memory fake
+  # cannot exercise migrations, constraints or transactions, which is exactly
+  # what these tests are for.
+  # -------------------------------------------------------------------------
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: carcare
+          POSTGRES_PASSWORD: carcare
+          POSTGRES_DB: carcare_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U carcare -d carcare_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+      redis:
+        image: redis:8-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://carcare:carcare@localhost:5432/carcare_test?schema=public
+      REDIS_URL: redis://localhost:6379
+      LOG_LEVEL: silent
+      SWAGGER_ENABLED: 'false'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm --filter @carcare/backend exec prisma generate
+
+      # `migrate deploy` (not `migrate dev`) so CI exercises the same code path
+      # a production release uses, and fails on any drift.
+      - name: Apply migrations
+        run: pnpm --filter @carcare/backend exec prisma migrate deploy
+
+      - name: Integration tests
+        run: pnpm test:e2e
+
+  # -------------------------------------------------------------------------
+  # Proves the production images actually build. No push here — that belongs to
+  # the release workflow — but a broken Dockerfile fails the PR, not the deploy.
+  # -------------------------------------------------------------------------
+  docker:
+    name: Docker images build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [quality]
+
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [backend, frontend]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build ${{ matrix.service }} image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ${{ matrix.service }}/Dockerfile
+          target: runtime
+          push: false
+          load: false
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,scope=${{ matrix.service }},mode=max

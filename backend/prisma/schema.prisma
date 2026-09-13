@@ -1,0 +1,79 @@
+// CarCare — Prisma schema
+// Grown incrementally, one migration per delivery phase.
+// Full target ERD: ../../docs/database.md
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+  runtime      = "nodejs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Phase 1 — identity foundation
+// ---------------------------------------------------------------------------
+
+/// Coarse-grained platform role. Vehicle-level permissions are separate
+/// (see VehicleMember, Phase 3) — this only distinguishes staff from users.
+enum UserRole {
+  USER
+  ADMIN
+}
+
+model User {
+  id           String   @id @default(uuid(7)) @db.Uuid
+  /// Always stored lower-cased and trimmed; uniqueness is enforced here so
+  /// two casings of the same address cannot both register.
+  email        String   @unique @db.VarChar(320)
+  passwordHash String   @db.VarChar(255)
+  displayName  String   @db.VarChar(120)
+  role         UserRole @default(USER)
+
+  /// Display preferences. ISO-4217 code; TND is a 3-decimal currency, which is
+  /// why every monetary column is numeric(_, 3) rather than numeric(_, 2).
+  currency String @default("TND") @db.Char(3)
+  locale   String @default("en") @db.VarChar(10)
+  timezone String @default("Africa/Tunis") @db.VarChar(64)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  refreshTokens RefreshToken[]
+
+  @@map("users")
+}
+
+/// Opaque refresh tokens, hashed at rest and rotated on every use.
+///
+/// `familyId` groups every token descended from one login. If a token that has
+/// already been rotated is presented again, that is a replay: the entire family
+/// is revoked rather than just the single token. See docs/decisions.md ADR-005.
+model RefreshToken {
+  id     String @id @default(uuid(7)) @db.Uuid
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// SHA-256 of the opaque token. The plaintext never touches the database, so
+  /// a database leak alone cannot be replayed against the API.
+  tokenHash String   @unique @db.Char(64)
+  familyId  String   @db.Uuid
+  expiresAt DateTime @db.Timestamptz(3)
+
+  /// Set when the token is rotated, revoked on logout, or revoked by replay
+  /// detection. A token is usable only while this is null and expiresAt is future.
+  revokedAt DateTime? @db.Timestamptz(3)
+
+  userAgent String? @db.VarChar(512)
+  ipAddress String? @db.VarChar(64)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  @@index([userId])
+  @@index([familyId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}

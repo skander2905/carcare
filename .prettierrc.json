@@ -1,0 +1,14 @@
+{
+  "singleQuote": true,
+  "trailingComma": "all",
+  "printWidth": 110,
+  "semi": true,
+  "arrowParens": "always",
+  "endOfLine": "lf",
+  "overrides": [
+    {
+      "files": "frontend/**/*.{ts,tsx,css}",
+      "options": { "plugins": ["prettier-plugin-tailwindcss"] }
+    }
+  ]
+}

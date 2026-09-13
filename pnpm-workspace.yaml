@@ -1,0 +1,15 @@
+packages:
+  - backend
+  - frontend
+
+# pnpm 10 refuses to run dependency build scripts unless they are named here.
+# Each of these compiles or downloads a native/binary artefact that the project
+# genuinely needs; anything not listed (telemetry reporters, for example) stays
+# blocked. This is a supply-chain control, so keep the list short and reviewed.
+onlyBuiltDependencies:
+  - '@prisma/client'
+  - '@prisma/engines'
+  - prisma
+  - '@swc/core'
+  - esbuild
+  - unrs-resolver

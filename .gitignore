@@ -1,0 +1,41 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# Generated code — reproduced by `pnpm --filter @carcare/backend exec prisma generate`
+backend/src/generated/
+
+# Test output
+coverage/
+test-results/
+playwright-report/
+blob-report/
+.nyc_output/
+
+# Environment — never commit real secrets
+.env
+.env.*
+!.env.example
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+.vscode/*
+!.vscode/extensions.json
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# Local agent/editor tooling
+.claude/

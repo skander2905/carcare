@@ -33,9 +33,13 @@ RUN pnpm --filter @carcare/backend exec prisma generate \
 # ---------------------------------------------------------------------------
 # Re-resolve with --prod so devDependencies (vitest, eslint, the TypeScript
 # compiler) never reach the runtime image.
+#
+# --ignore-scripts because this install re-runs the root `prepare` script, and
+# `prepare` is `husky` — which --prod has just pruned. Nothing in the runtime
+# dependency tree needs a build script here; the image is already compiled.
 FROM build AS prune
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
-    pnpm install --frozen-lockfile --prod
+    pnpm install --frozen-lockfile --prod --ignore-scripts
 
 # ---------------------------------------------------------------------------
 FROM base AS runtime

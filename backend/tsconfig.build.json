@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    /* Pin the root so the emitted tree is dist/main.js rather than dist/src/main.js.
+       Tooling files (prisma.config.ts, vitest configs, the seed) are run through
+       tsx/vitest directly and must stay out of the shipped build. */
+    "rootDir": "./src",
+    "incremental": false
+  },
+  "exclude": [
+    "node_modules",
+    "dist",
+    "test",
+    "prisma",
+    "prisma.config.ts",
+    "vitest.config.ts",
+    "vitest.config.e2e.ts",
+    "eslint.config.mjs",
+    "**/*.spec.ts",
+    "**/*.e2e-spec.ts"
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "compilerOptions": {
+    /* NestJS 12 ships ESM-only, so the backend is a native ES module.
+       `nodenext` is what makes the generated Prisma client's `./enums.js`
+       specifiers resolve correctly. Relative imports carry a .js extension. */
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "target": "ES2023",
+    "lib": ["ES2023"],
+
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+
+    "strict": true,
+    /* Nest populates DTO/entity classes reflectively rather than via a
+       constructor, so definite-assignment assertions would be pure noise. */
+    "strictPropertyInitialization": false,
+    "noImplicitOverride": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "forceConsistentCasingInFileNames": true,
+
+    "declaration": false,
+    "removeComments": true,
+    "sourceMap": true,
+    "incremental": true,
+    "skipLibCheck": true,
+    "outDir": "./dist",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "types": ["node", "vitest/globals"]
+  },
+  "include": [
+    "src/**/*",
+    "test/**/*",
+    "prisma/**/*.ts",
+    "prisma.config.ts",
+    "vitest.config.ts",
+    "vitest.config.e2e.ts"
+  ],
+  "exclude": ["node_modules", "dist"]
+}

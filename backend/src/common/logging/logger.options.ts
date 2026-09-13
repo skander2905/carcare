@@ -24,11 +24,7 @@ export interface LoggerOptionsInput {
  * 3. **Probes are silent.** A readiness check every few seconds would otherwise
  *    drown the log in noise and cost real money in a hosted log store.
  */
-export function buildLoggerOptions({
-  level,
-  pretty,
-  quietPaths,
-}: LoggerOptionsInput): Params {
+export function buildLoggerOptions({ level, pretty, quietPaths }: LoggerOptionsInput): Params {
   return {
     pinoHttp: {
       level,
@@ -62,11 +58,7 @@ export function buildLoggerOptions({
       },
 
       // 4xx is a client mistake (warn); 5xx is ours (error).
-      customLogLevel: (
-        _req: IncomingMessage,
-        res: ServerResponse,
-        err?: Error,
-      ) => {
+      customLogLevel: (_req: IncomingMessage, res: ServerResponse, err?: Error) => {
         if (err) return 'error';
         if (res.statusCode >= 500) return 'error';
         if (res.statusCode >= 400) return 'warn';

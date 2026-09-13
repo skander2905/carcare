@@ -1,10 +1,6 @@
 import { Controller, Get, VERSION_NEUTRAL } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
-import {
-  HealthCheck,
-  HealthCheckService,
-  type HealthCheckResult,
-} from '@nestjs/terminus';
+import { HealthCheck, HealthCheckService, type HealthCheckResult } from '@nestjs/terminus';
 import { PrismaHealthIndicator } from './indicators/prisma.health-indicator.js';
 import { RedisHealthIndicator } from './indicators/redis.health-indicator.js';
 
@@ -34,10 +30,7 @@ export class HealthController {
     description: 'Aggregated status of the API and its dependencies.',
   })
   check(): Promise<HealthCheckResult> {
-    return this.health.check([
-      () => this.database.check('database'),
-      () => this.redis.check('redis'),
-    ]);
+    return this.health.check([() => this.database.check('database'), () => this.redis.check('redis')]);
   }
 
   @Get('live')
@@ -53,13 +46,9 @@ export class HealthController {
   @HealthCheck()
   @ApiOperation({ summary: 'Readiness probe — dependencies reachable' })
   @ApiOkResponse({
-    description:
-      'Returns 503 when PostgreSQL is unreachable; Redis only degrades.',
+    description: 'Returns 503 when PostgreSQL is unreachable; Redis only degrades.',
   })
   ready(): Promise<HealthCheckResult> {
-    return this.health.check([
-      () => this.database.check('database'),
-      () => this.redis.check('redis'),
-    ]);
+    return this.health.check([() => this.database.check('database'), () => this.redis.check('redis')]);
   }
 }

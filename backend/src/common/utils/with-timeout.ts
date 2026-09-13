@@ -13,11 +13,7 @@ export class TimeoutError extends Error {
  * connection but never answers would otherwise hang the probe until the
  * orchestrator's own timeout fires, turning "degraded" into "unresponsive".
  */
-export async function withTimeout<T>(
-  operation: Promise<T>,
-  ms: number,
-  label: string,
-): Promise<T> {
+export async function withTimeout<T>(operation: Promise<T>, ms: number, label: string): Promise<T> {
   let timer: NodeJS.Timeout | undefined;
 
   const deadline = new Promise<never>((_resolve, reject) => {

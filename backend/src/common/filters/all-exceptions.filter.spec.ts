@@ -1,9 +1,4 @@
-import {
-  type ArgumentsHost,
-  BadRequestException,
-  HttpException,
-  HttpStatus,
-} from '@nestjs/common';
+import { type ArgumentsHost, BadRequestException, HttpException, HttpStatus } from '@nestjs/common';
 import { type PinoLogger } from 'nestjs-pino';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { type AppConfig } from '../../config/config.types.js';
@@ -14,9 +9,7 @@ interface CapturedResponse {
   json: ReturnType<typeof vi.fn>;
 }
 
-function buildHost(
-  overrides: Partial<{ originalUrl: string; method: string; id: unknown }> = {},
-) {
+function buildHost(overrides: Partial<{ originalUrl: string; method: string; id: unknown }> = {}) {
   const response: CapturedResponse = {
     status: vi.fn().mockReturnThis(),
     json: vi.fn(),
@@ -66,12 +59,7 @@ describe('AllExceptionsFilter', () => {
     it('returns every documented field', () => {
       const { host, response } = buildHost();
 
-      filter.catch(
-        new BadRequestException(
-          'Odometer cannot be lower than the previous reading',
-        ),
-        host,
-      );
+      filter.catch(new BadRequestException('Odometer cannot be lower than the previous reading'), host);
 
       expect(response.status).toHaveBeenCalledWith(400);
       expect(bodyOf(response)).toMatchObject({
@@ -151,16 +139,11 @@ describe('AllExceptionsFilter', () => {
       const production = buildFilter(true);
       const { host, response } = buildHost();
 
-      production.filter.catch(
-        new Error('password authentication failed for user "carcare"'),
-        host,
-      );
+      production.filter.catch(new Error('password authentication failed for user "carcare"'), host);
 
       const body = bodyOf(response);
       expect(body.statusCode).toBe(500);
-      expect(JSON.stringify(body)).not.toContain(
-        'password authentication failed',
-      );
+      expect(JSON.stringify(body)).not.toContain('password authentication failed');
       expect(body.message).toContain('request id');
     });
 

@@ -39,14 +39,8 @@ export default tseslint.config(
         'error',
         { prefer: 'type-imports', fixStyle: 'inline-type-imports' },
       ],
-      '@typescript-eslint/no-unused-vars': [
-        'error',
-        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
-      ],
-      '@typescript-eslint/explicit-member-accessibility': [
-        'error',
-        { accessibility: 'no-public' },
-      ],
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      '@typescript-eslint/explicit-member-accessibility': ['error', { accessibility: 'no-public' }],
 
       eqeqeq: ['error', 'smart'],
       'no-console': 'error',
@@ -72,12 +66,7 @@ export default tseslint.config(
     rules: { 'no-console': 'off' },
   },
   {
-    files: [
-      '*.mjs',
-      'vitest.config.ts',
-      'vitest.config.e2e.ts',
-      'prisma.config.ts',
-    ],
+    files: ['*.mjs', 'vitest.config.ts', 'vitest.config.e2e.ts', 'prisma.config.ts'],
     ...tseslint.configs.disableTypeChecked,
   },
   prettier,

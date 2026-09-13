@@ -27,10 +27,7 @@ export class ApiErrorResponse {
 
   @ApiPropertyOptional({
     type: [String],
-    example: [
-      'email must be an email',
-      'password must be at least 12 characters',
-    ],
+    example: ['email must be an email', 'password must be at least 12 characters'],
     description: 'Field-level problems. Present for validation failures.',
   })
   details?: string[];
@@ -43,8 +40,7 @@ export class ApiErrorResponse {
 
   @ApiProperty({
     example: '0f9c3a5e-6f1b-4a2f-9a9a-2d1b0f4c77e1',
-    description:
-      'Correlates this response with the server logs for the same request.',
+    description: 'Correlates this response with the server logs for the same request.',
   })
   requestId: string;
 }
@@ -69,8 +65,47 @@ export const HTTP_ERROR_NAMES: Readonly<Record<number, string>> = {
 };
 
 export function httpErrorName(status: number): string {
-  return (
-    HTTP_ERROR_NAMES[status] ??
-    (status >= 500 ? 'InternalServerError' : 'Error')
-  );
+  return HTTP_ERROR_NAMES[status] ?? (status >= 500 ? 'InternalServerError' : 'Error');
+}
+
+export interface ErrorEnvelopeInput {
+  status: number;
+  message: string;
+  details?: string[];
+  path: string;
+  requestId: string;
+}
+
+/**
+ * Single constructor for the error envelope.
+ *
+ * Both the Nest exception filter and the Express-level 404 fallback build their
+ * response through here, so the two paths cannot drift into returning different
+ * shapes for the same class of failure.
+ */
+export function buildErrorEnvelope({
+  status,
+  message,
+  details,
+  path,
+  requestId,
+}: ErrorEnvelopeInput): ApiErrorResponse {
+  return {
+    statusCode: status,
+    message,
+    error: httpErrorName(status),
+    ...(details && details.length > 0 ? { details } : {}),
+    path,
+    timestamp: new Date().toISOString(),
+    requestId,
+  };
+}
+
+/**
+ * `pino-http` attaches a request id to the raw request. Express has no
+ * declaration for it, so read it defensively rather than asserting a shape.
+ */
+export function readRequestId(request: { id?: unknown }): string {
+  const { id } = request;
+  return typeof id === 'string' || typeof id === 'number' ? String(id) : '';
 }

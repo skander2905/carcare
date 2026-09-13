@@ -1,10 +1,4 @@
-import {
-  Inject,
-  Injectable,
-  Logger,
-  type OnModuleDestroy,
-  type OnModuleInit,
-} from '@nestjs/common';
+import { Inject, Injectable, Logger, type OnModuleDestroy, type OnModuleInit } from '@nestjs/common';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { databaseConfig } from '../config/configuration.js';
 import { type DatabaseConfig } from '../config/config.types.js';
@@ -21,10 +15,7 @@ import { PrismaClient } from '../generated/prisma/client.js';
  * (`prisma.vehicle.findMany(...)`) while letting Nest own its lifecycle.
  */
 @Injectable()
-export class PrismaService
-  extends PrismaClient
-  implements OnModuleInit, OnModuleDestroy
-{
+export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(PrismaService.name);
 
   constructor(@Inject(databaseConfig.KEY) config: DatabaseConfig) {

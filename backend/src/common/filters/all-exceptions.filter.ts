@@ -11,7 +11,7 @@ import { type Request, type Response } from 'express';
 import { InjectPinoLogger, PinoLogger } from 'nestjs-pino';
 import { appConfig } from '../../config/configuration.js';
 import { type AppConfig } from '../../config/config.types.js';
-import { type ApiErrorResponse, httpErrorName } from '../http/api-error.js';
+import { buildErrorEnvelope, httpErrorName, readRequestId } from '../http/api-error.js';
 
 /** Shape Nest produces for `new HttpException({ message, error }, status)`. */
 interface HttpExceptionBody {
@@ -38,13 +38,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 const SERVER_ERROR_THRESHOLD = 500;
 
 /**
- * `pino-http` attaches a request id to the raw request object. Express has no
- * declaration for it, so read it defensively rather than asserting a shape.
+ * Health probes answer to monitoring, not to API clients, and Terminus has its
+ * own well-defined payload describing which dependency failed. Rewriting a
+ * failing probe into the generic error envelope would throw that detail away —
+ * exactly when it is most needed.
  */
-function readRequestId(request: Request): string {
-  const { id } = request as Request & { id?: unknown };
-  return typeof id === 'string' || typeof id === 'number' ? String(id) : '';
-}
+const PROBE_PATH_PREFIX = '/health';
 
 /**
  * Terminal error handler. Every failure — expected or not — leaves through here,
@@ -68,17 +67,21 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const request = ctx.getRequest<Request>();
     const response = ctx.getResponse<Response>();
 
+    // Let Terminus's structured probe payload through untouched.
+    if (request.originalUrl.startsWith(PROBE_PATH_PREFIX) && exception instanceof HttpException) {
+      response.status(exception.getStatus()).json(exception.getResponse());
+      return;
+    }
+
     const normalized = this.normalize(exception);
 
-    const body: ApiErrorResponse = {
-      statusCode: normalized.status,
+    const body = buildErrorEnvelope({
+      status: normalized.status,
       message: normalized.message,
-      error: normalized.error,
-      ...(normalized.details ? { details: normalized.details } : {}),
+      details: normalized.details,
       path: request.originalUrl,
-      timestamp: new Date().toISOString(),
       requestId: readRequestId(request),
-    };
+    });
 
     this.log(normalized, request);
     response.status(normalized.status).json(body);
@@ -103,9 +106,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
 
       // ValidationPipe reports an array of field messages. Surface the first as
       // the headline and keep the full list in `details`.
-      const details = Array.isArray(payload.message)
-        ? payload.message
-        : payload.details;
+      const details = Array.isArray(payload.message) ? payload.message : payload.details;
       const message = Array.isArray(payload.message)
         ? (payload.message[0] ?? 'Validation failed')
         : (payload.message ?? exception.message);

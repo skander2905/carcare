@@ -10,9 +10,7 @@ const booleanFromEnv = (defaultValue: boolean) =>
     .union([z.boolean(), z.string()])
     .default(defaultValue)
     .transform((value) =>
-      typeof value === 'boolean'
-        ? value
-        : ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase()),
+      typeof value === 'boolean' ? value : ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase()),
     );
 
 /** Comma-separated list -> trimmed, non-empty string array. */
@@ -27,15 +25,7 @@ const listFromEnv = (defaultValue: string) =>
         .filter((entry) => entry.length > 0),
     );
 
-export const LOG_LEVELS = [
-  'fatal',
-  'error',
-  'warn',
-  'info',
-  'debug',
-  'trace',
-  'silent',
-] as const;
+export const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'] as const;
 
 /**
  * The single source of truth for every environment variable the API reads.
@@ -43,9 +33,7 @@ export const LOG_LEVELS = [
  * than failing later with an undefined deep inside a request.
  */
 export const envSchema = z.object({
-  NODE_ENV: z
-    .enum(['development', 'test', 'production'])
-    .default('development'),
+  NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 
   /**
    * One image, two roles. `api` serves HTTP, `worker` only drains queues,
@@ -86,9 +74,7 @@ export function validateEnv(raw: Record<string, unknown>): Env {
 
   if (!result.success) {
     const problems = result.error.issues
-      .map(
-        (issue) => `  - ${issue.path.join('.') || '(root)'}: ${issue.message}`,
-      )
+      .map((issue) => `  - ${issue.path.join('.') || '(root)'}: ${issue.message}`)
       .join('\n');
     throw new Error(`Invalid environment configuration:\n${problems}`);
   }

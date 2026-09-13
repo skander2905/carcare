@@ -1,14 +1,10 @@
 import { type Server } from 'node:http';
-import {
-  HttpStatus,
-  ValidationPipe,
-  VersioningType,
-  type INestApplication,
-} from '@nestjs/common';
+import { HttpStatus, ValidationPipe, VersioningType, type INestApplication } from '@nestjs/common';
 import { type NestExpressApplication } from '@nestjs/platform-express';
 import { Test } from '@nestjs/testing';
 import cookieParser from 'cookie-parser';
 import { AppModule } from '../src/app.module.js';
+import { notFoundHandler } from '../src/common/http/not-found.handler.js';
 
 /**
  * Boots the real application graph for integration tests.
@@ -42,6 +38,10 @@ export async function createTestApp(): Promise<INestApplication> {
   );
 
   await app.init();
+  // Registered after init() for the same reason as in main.ts: it must sit
+  // behind the routes so it only handles unmatched URLs.
+  app.use(notFoundHandler);
+
   return app;
 }
 

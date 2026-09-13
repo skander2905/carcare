@@ -1,9 +1,4 @@
-import {
-  HttpStatus,
-  Logger,
-  ValidationPipe,
-  VersioningType,
-} from '@nestjs/common';
+import { HttpStatus, Logger, ValidationPipe, VersioningType } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { type NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -12,16 +7,9 @@ import helmet from 'helmet';
 import { Logger as PinoNestLogger } from 'nestjs-pino';
 import { AppModule } from './app.module.js';
 import { ApiErrorResponse } from './common/http/api-error.js';
-import {
-  appConfig,
-  httpConfig,
-  swaggerConfig,
-} from './config/configuration.js';
-import {
-  type AppConfig,
-  type HttpConfig,
-  type SwaggerConfig,
-} from './config/config.types.js';
+import { notFoundHandler } from './common/http/not-found.handler.js';
+import { appConfig, httpConfig, swaggerConfig } from './config/configuration.js';
+import { type AppConfig, type HttpConfig, type SwaggerConfig } from './config/config.types.js';
 
 /** Reject oversized bodies before they are parsed. Documents go to S3, not here. */
 const BODY_LIMIT = '1mb';
@@ -86,15 +74,8 @@ async function bootstrap(): Promise<void> {
         .setTitle('CarCare API')
         .setDescription('Personal vehicle cost, fuel and maintenance tracking.')
         .setVersion('1.0')
-        .addBearerAuth(
-          { type: 'http', scheme: 'bearer', bearerFormat: 'JWT' },
-          'access-token',
-        )
-        .addCookieAuth(
-          'carcare_refresh_token',
-          { type: 'apiKey', in: 'cookie' },
-          'refresh-token',
-        )
+        .addBearerAuth({ type: 'http', scheme: 'bearer', bearerFormat: 'JWT' }, 'access-token')
+        .addCookieAuth('carcare_refresh_token', { type: 'apiKey', in: 'cookie' }, 'refresh-token')
         .build(),
       { extraModels: [ApiErrorResponse] },
     );
@@ -108,12 +89,15 @@ async function bootstrap(): Promise<void> {
   // connection) when the orchestrator sends SIGTERM.
   app.enableShutdownHooks();
 
+  // `init()` is what registers the routes. Adding the fallback afterwards puts
+  // it last in the middleware chain, so it only sees genuinely unmatched URLs.
+  await app.init();
+  app.use(notFoundHandler);
+
   await app.listen(http.port, '0.0.0.0');
 
   const logger = new Logger('Bootstrap');
-  logger.log(
-    `CarCare API listening on port ${http.port} (${app_.nodeEnv}, role=${app_.role})`,
-  );
+  logger.log(`CarCare API listening on port ${http.port} (${app_.nodeEnv}, role=${app_.role})`);
   if (swagger.enabled) {
     logger.log(`API documentation at /${http.globalPrefix}/${swagger.path}`);
   }

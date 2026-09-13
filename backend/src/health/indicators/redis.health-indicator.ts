@@ -1,8 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import {
-  type HealthIndicatorResult,
-  HealthIndicatorService,
-} from '@nestjs/terminus';
+import { type HealthIndicatorResult, HealthIndicatorService } from '@nestjs/terminus';
 import { RedisService } from '../../redis/redis.service.js';
 import { withTimeout } from '../../common/utils/with-timeout.js';
 
@@ -24,9 +21,7 @@ export class RedisHealthIndicator {
    * one — so the instance stays in rotation and the impairment is visible in
    * the probe payload instead.
    */
-  async check<Key extends string>(
-    key: Key,
-  ): Promise<HealthIndicatorResult<Key>> {
+  async check<Key extends string>(key: Key): Promise<HealthIndicatorResult<Key>> {
     const session = this.healthIndicatorService.check(key);
     const startedAt = Date.now();
 

@@ -1,0 +1,137 @@
+# Local development stack: `docker compose up`.
+#
+# Every service is health-gated, so the API never starts against a database
+# that is still initialising — the classic source of flaky first-run failures.
+
+name: carcare
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-carcare}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-carcare}
+      POSTGRES_DB: ${POSTGRES_DB:-carcare}
+    ports:
+      - '${POSTGRES_PORT:-5432}:5432'
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-carcare} -d ${POSTGRES_DB:-carcare}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    # Append-only so queued jobs survive a restart of the container.
+    command: ['redis-server', '--appendonly', 'yes']
+    ports:
+      - '${REDIS_PORT:-6379}:6379'
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # S3-compatible object storage. The API starts using it in Phase 8 (documents);
+  # it runs from the start so the local environment never has to change shape.
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: ['server', '/data', '--console-address', ':9001']
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-carcare}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-carcare-dev-secret}
+    ports:
+      - '${MINIO_PORT:-9000}:9000'
+      - '${MINIO_CONSOLE_PORT:-9001}:9001'
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # One-shot: creates the bucket, then exits. `docker compose up` waits for it.
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-carcare} ${MINIO_ROOT_PASSWORD:-carcare-dev-secret} &&
+      mc mb --ignore-existing local/${S3_BUCKET:-carcare-documents} &&
+      echo 'MinIO bucket ready'
+      "
+    restart: 'no'
+
+  # Migrations run as their own short-lived service rather than inside the API
+  # entrypoint. With multiple API replicas, an entrypoint migration means N
+  # concurrent `migrate deploy` runs racing on the same advisory lock.
+  migrate:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: runtime
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-carcare}:${POSTGRES_PASSWORD:-carcare}@db:5432/${POSTGRES_DB:-carcare}?schema=public
+    command: ['node_modules/.bin/prisma', 'migrate', 'deploy']
+    restart: 'no'
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: runtime
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      APP_ROLE: api
+      PORT: 3001
+      API_PREFIX: api
+      DATABASE_URL: postgresql://${POSTGRES_USER:-carcare}:${POSTGRES_PASSWORD:-carcare}@db:5432/${POSTGRES_DB:-carcare}?schema=public
+      REDIS_URL: redis://redis:6379
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      LOG_PRETTY: ${LOG_PRETTY:-true}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-true}
+    ports:
+      - '${BACKEND_PORT:-3001}:3001'
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+      target: runtime
+      args:
+        # Baked in at build time — NEXT_PUBLIC_* cannot be changed at runtime.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - '${FRONTEND_PORT:-3000}:3000'
+
+volumes:
+  db-data:
+  redis-data:
+  minio-data:

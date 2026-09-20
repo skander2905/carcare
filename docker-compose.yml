@@ -113,6 +113,22 @@ services:
       LOG_PRETTY: ${LOG_PRETTY:-true}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       SWAGGER_ENABLED: ${SWAGGER_ENABLED:-true}
+      # No `:-default` on purpose: a compose stack without a real secret in
+      # .env should fail to boot rather than run on a value published in git.
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-15m}
+      JWT_ISSUER: ${JWT_ISSUER:-carcare}
+      JWT_AUDIENCE: ${JWT_AUDIENCE:-carcare-api}
+      REFRESH_TOKEN_TTL_DAYS: ${REFRESH_TOKEN_TTL_DAYS:-30}
+      REFRESH_COOKIE_NAME: ${REFRESH_COOKIE_NAME:-carcare_refresh_token}
+      REFRESH_COOKIE_SECURE: ${REFRESH_COOKIE_SECURE:-false}
+      REFRESH_REUSE_GRACE_MS: ${REFRESH_REUSE_GRACE_MS:-10000}
+      AUTH_RATE_LIMIT_ENABLED: ${AUTH_RATE_LIMIT_ENABLED:-true}
+      API_PUBLIC_URL: ${API_PUBLIC_URL:-http://localhost:3001}
+      WEB_APP_URL: ${WEB_APP_URL:-http://localhost:3000}
+      # Optional: unset means password-only sign-in.
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
     ports:
       - '${BACKEND_PORT:-3001}:3001'
 

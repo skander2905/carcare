@@ -4,6 +4,7 @@ import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { QueryProvider } from '@/components/providers/query-provider';
 import { ThemeProvider } from '@/components/providers/theme-provider';
+import { AuthProvider } from '@/features/auth/auth-provider';
 import { env } from '@/lib/env';
 import './globals.css';
 
@@ -31,8 +32,13 @@ export default function RootLayout({ children }: LayoutProps<'/'>) {
       <body className="bg-background text-foreground flex min-h-full flex-col">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <QueryProvider>
-            <TooltipProvider delayDuration={200}>{children}</TooltipProvider>
-            <Toaster richColors closeButton position="top-right" />
+            {/* Inside QueryProvider so authenticated queries can be invalidated
+                on sign-out, and above everything else so any component can ask
+                who is signed in. */}
+            <AuthProvider>
+              <TooltipProvider delayDuration={200}>{children}</TooltipProvider>
+              <Toaster richColors closeButton position="top-right" />
+            </AuthProvider>
           </QueryProvider>
         </ThemeProvider>
       </body>

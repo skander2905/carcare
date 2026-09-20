@@ -84,8 +84,27 @@ POST   /auth/login
 POST   /auth/refresh
 POST   /auth/logout
 GET    /auth/me
+GET    /users/me
 PATCH  /users/me
 ```
+
+### Federated sign-in
+
+```
+GET    /auth/providers                     -> providers this deployment configured
+GET    /auth/oauth/:provider               -> 302 to the provider
+GET    /auth/oauth/:provider/callback      -> 302 into the web app + refresh cookie
+GET    /auth/oauth/:provider/link          -> authorization URL (authenticated)
+GET    /auth/oauth                         -> providers linked to this account
+DELETE /auth/oauth/:provider               -> 204, refused if it is the last credential
+```
+
+The callback is a browser redirect, so failures come back as
+`?error=<code>` on the login page rather than as the JSON envelope —
+`oauth_state`, `oauth_email_taken`, `oauth_already_linked`, `oauth_failed`.
+No access token ever travels in a URL: the callback sets the refresh cookie and
+the web app calls `/auth/refresh`, exactly as it does on any cold load.
+Rationale in [decisions.md ADR-017](./decisions.md).
 
 ### Vehicles
 

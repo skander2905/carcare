@@ -25,11 +25,15 @@ enum UserRole {
 }
 
 model User {
-  id           String   @id @default(uuid(7)) @db.Uuid
+  id    String @id @default(uuid(7)) @db.Uuid
   /// Always stored lower-cased and trimmed; uniqueness is enforced here so
   /// two casings of the same address cannot both register.
-  email        String   @unique @db.VarChar(320)
-  passwordHash String   @db.VarChar(255)
+  email String @unique @db.VarChar(320)
+
+  /// Null for an account that has only ever signed in through a provider.
+  /// Nullable rather than a sentinel value: a column that sometimes holds "no
+  /// password" as a string is a column someone eventually compares against.
+  passwordHash String?  @db.VarChar(255)
   displayName  String   @db.VarChar(120)
   role         UserRole @default(USER)
 
@@ -43,6 +47,7 @@ model User {
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   refreshTokens RefreshToken[]
+  oauthAccounts OAuthAccount[]
 
   @@map("users")
 }
@@ -76,4 +81,47 @@ model RefreshToken {
   @@index([familyId])
   @@index([expiresAt])
   @@map("refresh_tokens")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 2b — federated identity
+// ---------------------------------------------------------------------------
+
+/// Identity providers the API can authenticate against. Stored rather than
+/// inferred so an account records which provider vouched for it.
+enum OAuthProvider {
+  GOOGLE
+  APPLE
+}
+
+/// A provider identity linked to a local user.
+///
+/// Separate from `User` because one person legitimately has several: a Google
+/// account and, later, an Apple one, both reaching the same vehicles. Folding
+/// the provider id onto `User` would allow exactly one, and adding the second
+/// would then be a migration rather than an insert.
+model OAuthAccount {
+  id     String @id @default(uuid(7)) @db.Uuid
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  provider OAuthProvider
+
+  /// The provider's stable subject identifier — Google's `sub`. Deliberately
+  /// not the email: people change their email address at the provider, and a
+  /// reused address must never resolve to someone else's account.
+  providerAccountId String @db.VarChar(255)
+
+  /// The address the provider last reported, kept for display and support.
+  /// Never used to resolve a login — `providerAccountId` is the identity.
+  email String? @db.VarChar(320)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  /// One local account per provider identity. The database refuses a second
+  /// link rather than trusting every call site to check first.
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("oauth_accounts")
 }

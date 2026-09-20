@@ -1,9 +1,11 @@
 import type { ConfigType } from '@nestjs/config';
 import type {
   appConfig,
+  authConfig,
   databaseConfig,
   httpConfig,
   loggingConfig,
+  oauthConfig,
   redisConfig,
   swaggerConfig,
 } from './configuration.js';
@@ -18,5 +20,7 @@ export type AppConfig = ConfigType<typeof appConfig>;
 export type HttpConfig = ConfigType<typeof httpConfig>;
 export type DatabaseConfig = ConfigType<typeof databaseConfig>;
 export type RedisConfig = ConfigType<typeof redisConfig>;
+export type AuthConfig = ConfigType<typeof authConfig>;
+export type OAuthConfig = ConfigType<typeof oauthConfig>;
 export type LoggingConfig = ConfigType<typeof loggingConfig>;
 export type SwaggerConfig = ConfigType<typeof swaggerConfig>;

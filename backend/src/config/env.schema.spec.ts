@@ -4,6 +4,7 @@ import { validateEnv } from './env.schema.js';
 const REQUIRED = {
   DATABASE_URL: 'postgresql://carcare:carcare@localhost:5432/carcare',
   REDIS_URL: 'redis://localhost:6379',
+  JWT_ACCESS_SECRET: 'a-test-signing-key-of-at-least-32-characters',
 };
 
 describe('validateEnv', () => {
@@ -72,5 +73,49 @@ describe('validateEnv', () => {
 
     expect(env.PORT).toBe(8080);
     expect(env.SHUTDOWN_TIMEOUT_MS).toBe(5000);
+  });
+
+  describe('authentication', () => {
+    // The whole point of having no default: an operator who forgets the secret
+    // must get a boot failure, not a token anyone who read the repo can forge.
+    it('refuses to boot without a signing key', () => {
+      const { JWT_ACCESS_SECRET: _omitted, ...withoutSecret } = REQUIRED;
+
+      expect(() => validateEnv(withoutSecret)).toThrow(/JWT_ACCESS_SECRET/);
+    });
+
+    it('rejects a signing key short enough to brute-force', () => {
+      expect(() => validateEnv({ ...REQUIRED, JWT_ACCESS_SECRET: 'too-short' })).toThrow(
+        /at least 32 characters/,
+      );
+    });
+
+    it('rejects an access TTL that is not a duration', () => {
+      expect(() => validateEnv({ ...REQUIRED, JWT_ACCESS_TTL: 'fifteen minutes' })).toThrow(/JWT_ACCESS_TTL/);
+    });
+
+    it('accepts the duration spellings jsonwebtoken understands', () => {
+      for (const ttl of ['900', '900s', '15m', '1h', '7d']) {
+        expect(validateEnv({ ...REQUIRED, JWT_ACCESS_TTL: ttl }).JWT_ACCESS_TTL).toBe(ttl);
+      }
+    });
+
+    it('applies the documented session defaults', () => {
+      const env = validateEnv({ ...REQUIRED });
+
+      expect(env.JWT_ACCESS_TTL).toBe('15m');
+      expect(env.REFRESH_TOKEN_TTL_DAYS).toBe(30);
+      expect(env.REFRESH_COOKIE_NAME).toBe('carcare_refresh_token');
+      expect(env.REFRESH_REUSE_GRACE_MS).toBe(10_000);
+      expect(env.AUTH_RATE_LIMIT_ENABLED).toBe(true);
+    });
+
+    // Left undefined so configuration.ts can derive it from NODE_ENV; a baked-in
+    // `false` default would quietly ship an insecure cookie to production.
+    it('leaves the Secure flag unset when it is not configured', () => {
+      expect(validateEnv({ ...REQUIRED }).REFRESH_COOKIE_SECURE).toBeUndefined();
+      expect(validateEnv({ ...REQUIRED, REFRESH_COOKIE_SECURE: 'false' }).REFRESH_COOKIE_SECURE).toBe(false);
+      expect(validateEnv({ ...REQUIRED, REFRESH_COOKIE_SECURE: 'true' }).REFRESH_COOKIE_SECURE).toBe(true);
+    });
   });
 });

@@ -1,6 +1,7 @@
 import { Controller, Get, VERSION_NEUTRAL } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { HealthCheck, HealthCheckService, type HealthCheckResult } from '@nestjs/terminus';
+import { Public } from '../auth/decorators/public.decorator.js';
 import { PrismaHealthIndicator } from './indicators/prisma.health-indicator.js';
 import { RedisHealthIndicator } from './indicators/redis.health-indicator.js';
 
@@ -16,6 +17,10 @@ import { RedisHealthIndicator } from './indicators/redis.health-indicator.js';
 // VERSION_NEUTRAL + excluded from the global prefix: probe URLs must not move
 // when the API is versioned, or every orchestrator config breaks on a release.
 @Controller({ path: 'health', version: VERSION_NEUTRAL })
+// Probes are called by the orchestrator, which holds no credentials — and a
+// readiness check that can fail on an auth problem would take healthy replicas
+// out of rotation for a reason unrelated to their health.
+@Public()
 export class HealthController {
   constructor(
     private readonly health: HealthCheckService,

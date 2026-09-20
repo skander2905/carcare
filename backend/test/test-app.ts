@@ -84,7 +84,11 @@ export function httpServer(app: INestApplication): Server {
  */
 export async function resetDatabase(app: INestApplication): Promise<void> {
   const prisma = app.get(PrismaService);
-  await prisma.$executeRawUnsafe('TRUNCATE TABLE "refresh_tokens", "users" CASCADE');
+  // `users` cascades to vehicles, memberships and readings; naming them anyway
+  // keeps the statement honest about what it destroys.
+  await prisma.$executeRawUnsafe(
+    'TRUNCATE TABLE "odometer_readings", "vehicle_members", "vehicles", "oauth_accounts", "refresh_tokens", "users" CASCADE',
+  );
 }
 
 /** Pulls one cookie out of a `set-cookie` header, value and attributes intact. */

@@ -7,8 +7,8 @@ a working, tested state. Status is updated as phases land.
 | ----- | ------------------------------------------------------------------------------------------------------------------------- | ------- |
 | 1     | **Foundation** — monorepo, NestJS + Next.js skeletons, config, logging, error handling, health probes, Prisma, Docker, CI | ✅ Done |
 | 2     | **Authentication** — register, login, refresh rotation, logout, guards, rate limiting, protected routes                   | ✅ Done |
-| 3     | **Vehicles** — CRUD, `VehicleMember` access control, odometer timeline                                                    | ⬜ Next |
-| 4     | **Expenses** — the cost ledger, categories, filtering, pagination                                                         | ⬜      |
+| 3     | **Vehicles** — CRUD, `VehicleMember` access control, odometer timeline                                                    | ✅ Done |
+| 4     | **Expenses** — the cost ledger, categories, filtering, pagination                                                         | ⬜ Next |
 | 5     | **Fuel** — entries, full-to-full consumption engine, fuel analytics                                                       | ⬜      |
 | 6     | **Maintenance** — records, schedules, due/overdue engine                                                                  | ⬜      |
 | 7     | **Reminders & jobs** — BullMQ queues, worker role, notifications                                                          | ⬜      |
@@ -146,6 +146,45 @@ Added after Phase 2 landed, on the same session machinery.
   which localhost cannot satisfy
 - 33 new unit tests and an 18-test integration suite that drives the whole HTTP
   flow through a stub provider, so it needs neither credentials nor a network
+
+## Phase 3 — delivered
+
+**Backend**
+
+- `Vehicle`, `VehicleMember` and `OdometerReading`, with the indexes
+  docs/database.md specifies. A `Transmission` enum was added alongside them;
+  the field was specified without one.
+- `VehicleAccessGuard` resolves `VehicleMember` on every vehicle-scoped route
+  and attaches the role. Authorisation never reads `Vehicle.ownerId` (ADR-006),
+  and services take the guard's resolved id rather than the raw parameter, so a
+  query can only be scoped by something already authorised.
+- **404, never 403**, for a vehicle the caller has no membership on — absent and
+  "not yours" are deliberately indistinguishable. 403 is used only where the
+  caller can already see the vehicle and merely lacks the role.
+- Creating a vehicle writes its owner membership in the same transaction. A
+  vehicle with no membership row is unreachable by design, and would still
+  occupy the unique plate index.
+- The odometer timeline enforces a **local** invariant: a reading must be at
+  least its predecessor and at most its successor in time. The naive "must
+  exceed current mileage" rule rejects backdating, which is the most common
+  correction anyone makes.
+- Concurrent readings are serialised with `SELECT … FOR UPDATE` on the vehicle
+  row (ADR-010), and `Vehicle.currentOdometerKm` is updated in the same
+  transaction as the reading it comes from.
+- Money and engine size leave as fixed-width decimal **strings**.
+  `Decimal.toString()` drops trailing zeros, so 38500.000 would otherwise ship
+  as `"38500"` and the width would vary by value.
+
+**Frontend**
+
+- Vehicle list with an empty state, archive toggle, add form and detail page
+- Odometer timeline with inline recording; the server's message names the
+  reading in the way, so it is shown verbatim rather than reworded
+- Money is grouped textually and never parsed to a float
+
+**Deferred:** the sharing UI. `VehicleMember` supports `EDITOR` and `VIEWER`
+today and the guard already honours them, but V1 creates only `OWNER` rows —
+inviting someone is an insert plus an endpoint, not a migration.
 
 ## Deferred by design
 

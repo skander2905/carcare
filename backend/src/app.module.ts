@@ -11,7 +11,9 @@ import { type LoggingConfig } from './config/config.types.js';
 import { HealthModule } from './health/health.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { RedisModule } from './redis/redis.module.js';
+import { OdometerModule } from './odometer/odometer.module.js';
 import { UsersModule } from './users/users.module.js';
+import { VehiclesModule } from './vehicles/vehicles.module.js';
 
 /**
  * Composition root.
@@ -45,6 +47,8 @@ import { UsersModule } from './users/users.module.js';
     // explicitly with @Public().
     AuthModule,
     UsersModule,
+    VehiclesModule,
+    OdometerModule,
   ],
   providers: [
     // Registered through DI rather than `app.useGlobalFilters(new ...)` so the

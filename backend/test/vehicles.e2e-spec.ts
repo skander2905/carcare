@@ -92,6 +92,36 @@ describe('Vehicles (e2e)', () => {
       expect(body.data[0]).toMatchObject({ odometerKm: 120_000, source: 'MANUAL' });
     });
 
+    it('seeds the timeline for a brand-new car at zero kilometres', async () => {
+      const token = await signUp('owner@example.com');
+      const { body: vehicle } = await createVehicle(token, { initialOdometerKm: 0 }).expect(201);
+
+      const { body } = await request(server())
+        .get(`/api/v1/vehicles/${vehicle.id}/odometer`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      // Zero is a real reading. Skipping it would leave the vehicle reporting
+      // 0 km with an empty timeline, so the next entry would look like the
+      // first and the distance driven in between would be lost.
+      expect(body.data).toHaveLength(1);
+      expect(body.data[0].odometerKm).toBe(0);
+    });
+
+    it('records no reading when the mileage was not given', async () => {
+      const token = await signUp('owner@example.com');
+      const { body: vehicle } = await createVehicle(token, { initialOdometerKm: undefined }).expect(201);
+
+      const { body } = await request(server())
+        .get(`/api/v1/vehicles/${vehicle.id}/odometer`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+
+      // Omitted means "I do not know yet", which is different from zero.
+      expect(body.data).toHaveLength(0);
+      expect(vehicle.currentOdometerKm).toBe(0);
+    });
+
     it('normalises the licence plate so one car cannot be entered twice', async () => {
       const token = await signUp('owner@example.com');
       await createVehicle(token).expect(201);

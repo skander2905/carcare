@@ -9,6 +9,7 @@ import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { FormField } from '@/features/auth/form-field';
 import { ApiError } from '@/lib/api/client';
+import { optionalNumber } from '@/lib/forms/optional-number';
 import { FUEL_TYPES, TRANSMISSIONS, type Vehicle } from '@/lib/vehicles/types';
 import { fuelLabel, transmissionLabel } from '@/lib/vehicles/format';
 import { vehicleKeys, vehiclesApi } from '@/lib/vehicles/vehicles-api';
@@ -31,8 +32,10 @@ const vehicleSchema = z.object({
   licensePlate: z.string().trim().min(1, 'Enter the plate').max(32),
   fuelType: z.enum(FUEL_TYPES),
   transmission: z.union([z.enum(TRANSMISSIONS), z.literal('')]).optional(),
-  engineSize: z.union([z.coerce.number().min(0.1).max(20), z.literal('')]).optional(),
-  initialOdometerKm: z.union([z.coerce.number().int().min(0).max(5_000_000), z.literal('')]).optional(),
+  // Emptiness is decided before coercion — see optionalNumber. A plain union
+  // would turn an untouched mileage field into an explicit 0.
+  engineSize: optionalNumber((n) => n.min(0.1).max(20)),
+  initialOdometerKm: optionalNumber((n) => n.int().min(0).max(5_000_000)),
   // Kept as a string all the way to the API: parsing money to a float here
   // would round it before it ever reached the exact numeric column.
   purchasePrice: z
@@ -55,10 +58,9 @@ function toPayload(values: z.output<typeof vehicleSchema>) {
     licensePlate: values.licensePlate,
     fuelType: values.fuelType,
     ...(values.transmission ? { transmission: values.transmission } : {}),
-    ...(values.engineSize !== '' && values.engineSize !== undefined ? { engineSize: values.engineSize } : {}),
-    ...(values.initialOdometerKm !== '' && values.initialOdometerKm !== undefined
-      ? { initialOdometerKm: values.initialOdometerKm }
-      : {}),
+    // `undefined` now genuinely means "not given", so a real 0 survives.
+    ...(values.engineSize === undefined ? {} : { engineSize: values.engineSize }),
+    ...(values.initialOdometerKm === undefined ? {} : { initialOdometerKm: values.initialOdometerKm }),
     ...(values.purchasePrice ? { purchasePrice: values.purchasePrice } : {}),
     ...(values.color ? { color: values.color } : {}),
   };
@@ -78,6 +80,8 @@ export function VehicleForm() {
   } = useForm<VehicleValues>({
     resolver: zodResolver(vehicleSchema),
     defaultValues: { fuelType: 'PETROL', transmission: '', engineSize: '', initialOdometerKm: '' },
+    // Empty inputs stay empty strings in the form and become `undefined` in the
+    // parsed output; the two shapes are deliberately different.
   });
 
   const create = useMutation({
@@ -173,7 +177,7 @@ export function VehicleForm() {
           type="number"
           inputMode="numeric"
           placeholder="120000"
-          hint="Becomes the first point on the timeline."
+          hint="Becomes the first point on the timeline. Leave blank if unknown."
           error={errors.initialOdometerKm?.message}
           {...register('initialOdometerKm')}
         />

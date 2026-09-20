@@ -36,7 +36,12 @@ export class VehiclesService {
 
     // The starting mileage is a reading like any other, so the timeline has a
     // first point and "distance since I got the car" is answerable from day one.
-    if (initialOdometerKm !== undefined && initialOdometerKm > 0) {
+    //
+    // Zero counts. A car delivered new genuinely starts at 0 km, and skipping
+    // it would leave the vehicle reporting 0 with an empty timeline — after
+    // which the next reading looks like the first and the distance covered in
+    // between is lost.
+    if (initialOdometerKm !== undefined) {
       await this.odometer.seed(vehicle.id, initialOdometerKm, vehicle.purchaseDate ?? vehicle.createdAt);
     }
 

@@ -25,9 +25,14 @@ export function OdometerTimeline({ vehicleId }: { vehicleId: string }) {
   const [value, setValue] = useState('');
   const [error, setError] = useState<string | null>(null);
 
+  const [page, setPage] = useState(1);
+
   const readings = useQuery({
-    queryKey: vehicleKeys.readings(vehicleId, 1),
-    queryFn: () => vehiclesApi.readings(vehicleId),
+    queryKey: vehicleKeys.readings(vehicleId, page),
+    queryFn: () => vehiclesApi.readings(vehicleId, page),
+    // Keeps the current page on screen while the next one loads, instead of
+    // collapsing the list back to a skeleton on every step.
+    placeholderData: (previous) => previous,
   });
 
   const record = useMutation({
@@ -35,6 +40,8 @@ export function OdometerTimeline({ vehicleId }: { vehicleId: string }) {
     onSuccess: async () => {
       setValue('');
       setError(null);
+      // A new reading is the newest, so it belongs on the first page.
+      setPage(1);
       toast.success('Reading recorded');
       // The vehicle's headline mileage moves with it, so both caches go.
       await queryClient.invalidateQueries({ queryKey: vehicleKeys.all });
@@ -98,6 +105,25 @@ export function OdometerTimeline({ vehicleId }: { vehicleId: string }) {
             <Skeleton className="h-10 w-full" />
             <Skeleton className="h-10 w-full" />
           </div>
+        ) : readings.isError ? (
+          /*
+           * Distinct from "no readings yet".
+           *
+           * Falling through to the empty state would present a failed request
+           * as a car with no history — losing the signal entirely, and inviting
+           * someone to re-enter readings that are already stored.
+           */
+          <div className="space-y-2">
+            <p role="alert" className="text-sm font-medium">
+              Could not load the mileage history
+            </p>
+            <p className="text-muted-foreground text-sm">
+              {readings.error instanceof Error ? readings.error.message : 'Something went wrong.'}
+            </p>
+            <Button variant="outline" size="sm" onClick={() => void readings.refetch()}>
+              Try again
+            </Button>
+          </div>
         ) : readings.data?.data.length ? (
           <ol className="divide-border divide-y">
             {readings.data.data.map((reading) => (
@@ -120,10 +146,31 @@ export function OdometerTimeline({ vehicleId }: { vehicleId: string }) {
           <p className="text-muted-foreground text-sm">No readings yet.</p>
         )}
 
-        {readings.data && readings.data.meta.total > readings.data.data.length ? (
-          <p className="text-muted-foreground text-xs">
-            Showing {readings.data.data.length} of {readings.data.meta.total} readings.
-          </p>
+        {readings.data && readings.data.meta.totalPages > 1 ? (
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-muted-foreground text-xs tabular-nums">
+              Page {readings.data.meta.page} of {readings.data.meta.totalPages} · {readings.data.meta.total}{' '}
+              readings
+            </p>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={page === 1 || readings.isFetching}
+                onClick={() => setPage((current) => Math.max(1, current - 1))}
+              >
+                Newer
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={!readings.data.meta.hasNext || readings.isFetching}
+                onClick={() => setPage((current) => current + 1)}
+              >
+                Older
+              </Button>
+            </div>
+          </div>
         ) : null}
       </CardContent>
     </Card>

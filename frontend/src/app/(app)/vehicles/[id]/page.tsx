@@ -58,7 +58,7 @@ export default function VehicleDetailPage() {
 
   // A 404 here is the API saying "absent, or not yours" — deliberately the same
   // answer, so an id cannot be probed for existence.
-  if (vehicle.isError || !vehicle.data) {
+  if (vehicle.error instanceof ApiError && vehicle.error.status === 404) {
     return (
       <div className="mx-auto w-full max-w-4xl space-y-4 px-4 py-16 text-center sm:px-6">
         <h1 className="text-xl font-semibold">Vehicle not found</h1>
@@ -68,6 +68,33 @@ export default function VehicleDetailPage() {
         <Button asChild variant="outline" size="sm">
           <Link href="/vehicles">Back to vehicles</Link>
         </Button>
+      </div>
+    );
+  }
+
+  /*
+   * Anything else is our problem, not a missing vehicle.
+   *
+   * Telling someone their car was deleted because the API returned a 500 or the
+   * network dropped is worse than saying nothing: it hides an outage behind a
+   * plausible explanation, and invites them to re-enter data that is still
+   * there.
+   */
+  if (vehicle.isError || !vehicle.data) {
+    return (
+      <div className="mx-auto w-full max-w-4xl space-y-4 px-4 py-16 text-center sm:px-6">
+        <h1 className="text-xl font-semibold">Could not load this vehicle</h1>
+        <p className="text-muted-foreground text-sm">
+          {vehicle.error instanceof Error ? vehicle.error.message : 'Something went wrong.'}
+        </p>
+        <div className="flex justify-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => void vehicle.refetch()}>
+            Try again
+          </Button>
+          <Button asChild variant="ghost" size="sm">
+            <Link href="/vehicles">Back to vehicles</Link>
+          </Button>
+        </div>
       </div>
     );
   }

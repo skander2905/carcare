@@ -1,4 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
+import { type Type, applyDecorators } from '@nestjs/common';
+import { ApiExtraModels, ApiOkResponse, ApiProperty, getSchemaPath } from '@nestjs/swagger';
 
 /**
  * The envelope every paginated list returns, as documented in api.md §5.
@@ -38,3 +39,26 @@ export function paginate<T>(data: T[], total: number, page: number, limit: numbe
     meta: { page, limit, total, totalPages, hasNext: page < totalPages },
   };
 }
+
+/**
+ * Documents the `{ data, meta }` envelope for a given item type.
+ *
+ * `@ApiOkResponse({ type: [Thing] })` would advertise a bare array, which is
+ * what the endpoint *contains* rather than what it returns — so `/api/docs`
+ * and every generated client would unpack the wrong shape. Decorators cannot
+ * express a generic, so the schema is composed by reference instead.
+ */
+export const ApiPaginatedResponse = <TModel extends Type<unknown>>(model: TModel) =>
+  applyDecorators(
+    ApiExtraModels(PageMeta, model),
+    ApiOkResponse({
+      schema: {
+        type: 'object',
+        required: ['data', 'meta'],
+        properties: {
+          data: { type: 'array', items: { $ref: getSchemaPath(model) } },
+          meta: { $ref: getSchemaPath(PageMeta) },
+        },
+      },
+    }),
+  );

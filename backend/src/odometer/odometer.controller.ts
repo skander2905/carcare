@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { type Paginated, paginate } from '../common/http/paginated.js';
+import { ApiBearerAuth, ApiCreatedResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiPaginatedResponse, type Paginated, paginate } from '../common/http/paginated.js';
 import { VehicleRole } from '../generated/prisma/enums.js';
 import { CurrentVehicle } from '../vehicles/decorators/vehicle-access.decorator.js';
 import { MinimumVehicleRole } from '../vehicles/decorators/vehicle-role.decorator.js';
@@ -23,7 +23,7 @@ export class OdometerController {
 
   @Get()
   @ApiOperation({ summary: 'The mileage timeline, newest first' })
-  @ApiOkResponse({ type: [OdometerReadingResponse] })
+  @ApiPaginatedResponse(OdometerReadingResponse)
   async list(
     @Param('vehicleId', ParseUUIDPipe) _vehicleId: string,
     @CurrentVehicle() access: VehicleAccess,

@@ -29,9 +29,19 @@ export function VehicleList() {
 
   if (vehicles.isError) {
     return (
-      <p role="alert" className="text-destructive text-sm">
-        Could not load your vehicles. Refresh to try again.
-      </p>
+      <Card>
+        <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
+          <p role="alert" className="text-sm font-medium">
+            Could not load your vehicles
+          </p>
+          <p className="text-muted-foreground text-sm">
+            {vehicles.error instanceof Error ? vehicles.error.message : 'Something went wrong.'}
+          </p>
+          <Button variant="outline" size="sm" onClick={() => void vehicles.refetch()}>
+            Try again
+          </Button>
+        </CardContent>
+      </Card>
     );
   }
 

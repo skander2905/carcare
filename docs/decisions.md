@@ -358,3 +358,59 @@ doing it properly needs historical exchange rates and a decision about whether a
 report values a purchase at the rate on the day or today's rate. That is a real
 product question, not a schema detail. Adding `currency` to `Expense` later is
 an additive migration with a backfill from `User.currency`.
+
+---
+
+## ADR-017 — Federated sign-in, and why a matching email is not proof of identity
+
+**Context.** Users expect "Continue with Google". The API already has a session
+model — short access JWTs plus rotating opaque refresh tokens — and a second
+parallel notion of a session would be a second thing to get wrong.
+
+**Decision.** The authorization-code flow with PKCE, run **server-side**.
+
+- `GET /auth/oauth/:provider` issues `state` + a PKCE verifier, stores both in
+  Redis for ten minutes, and redirects to the provider.
+- The callback verifies `state` (deleting it in the same round trip, so it is
+  single-use), exchanges the code, and validates the ID token's signature,
+  issuer, audience and expiry against the provider's JWKS.
+- It then issues **exactly the session a password login issues** and redirects
+  into the web app. No token appears in the URL: the refresh cookie is set, and
+  the web app's existing cold-load `/auth/refresh` turns it into an access
+  token.
+
+**A matching email address does not link accounts.** If a provider identity is
+new and its address already belongs to a local account, the request is refused
+with `oauth_email_taken`. Linking happens only from a session that has already
+authenticated.
+
+**Why, specifically.** This API does not verify email addresses at registration
+— that needs a mail provider, which arrives in Phase 7. So a local account's
+address is _unproven_: anyone can register as `victim@gmail.com`. Auto-linking
+on a match would hand that squatter a shared account with the real owner the
+moment the owner signed in with Google, and the squatter's password would still
+work. The common "link when the provider says the email is verified" rule
+verifies the wrong side: it establishes that Google trusts the address, not that
+our existing local account does.
+
+**Consequences.** One extra step for a genuine user who signed up with a
+password and later wants Google. `/settings` exists to make that step
+available, and the refusal message names it. Once email verification ships, this
+decision is worth revisiting with a follow-up record rather than a quiet edit.
+
+**Also decided.**
+
+- Identity is the provider's `sub`, never the email. People change their address
+  at the provider, and a recycled address must not resolve to someone else.
+- Removing the last credential is refused. An account created through Google
+  with no password has exactly one way in, and password reset does not exist yet.
+- Providers are optional configuration. With no credentials the provider is not
+  registered, `/auth/providers` returns `[]`, and no button renders — a fresh
+  clone and CI must boot without secrets.
+
+**Rejected.** The Google Identity Services button returning an ID token to the
+browser — it works, but it is a second sign-in path with its own failure modes,
+and it does not generalise to Apple, whose flow is a form POST. Auto-linking on
+a verified provider email — unsafe here for the reason above. Storing `state` in
+a signed cookie instead of Redis — self-contained means replayable, and the
+callback URL would work twice.

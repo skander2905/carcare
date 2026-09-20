@@ -120,8 +120,8 @@ Full rationale and rejected alternatives live in [`decisions.md`](./decisions.md
 HTTP request
   → Helmet / CORS
   → Pino request logger (assigns request id, redacts secrets)
-  → ThrottlerGuard (rate limit)
-  → JwtAuthGuard (validates access token → req.user)
+  → RateLimitGuard (Redis sliding window; only routes carrying @RateLimit)
+  → JwtAuthGuard (validates access token → req.user, unless @Public)
   → VehicleAccessGuard (resolves VehicleMember for :vehicleId → req.vehicleAccess)
   → ValidationPipe (DTO validation + transformation, whitelist + forbidNonWhitelisted)
   → Controller

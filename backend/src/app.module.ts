@@ -1,14 +1,17 @@
 import { Module } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
+import { AuthModule } from './auth/auth.module.js';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 import { buildLoggerOptions } from './common/logging/logger.options.js';
+import { RateLimitModule } from './common/rate-limit/rate-limit.module.js';
 import { AppConfigModule } from './config/config.module.js';
 import { loggingConfig } from './config/configuration.js';
 import { type LoggingConfig } from './config/config.types.js';
 import { HealthModule } from './health/health.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { RedisModule } from './redis/redis.module.js';
+import { UsersModule } from './users/users.module.js';
 
 /**
  * Composition root.
@@ -33,8 +36,15 @@ import { RedisModule } from './redis/redis.module.js';
 
     PrismaModule,
     RedisModule,
+    RateLimitModule,
 
     HealthModule,
+
+    // AuthModule registers the global JwtAuthGuard, so every route added by a
+    // feature module below is protected by default and has to opt out
+    // explicitly with @Public().
+    AuthModule,
+    UsersModule,
   ],
   providers: [
     // Registered through DI rather than `app.useGlobalFilters(new ...)` so the

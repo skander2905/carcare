@@ -50,6 +50,36 @@ export const redisConfig = registerAs('redis', () => ({
   url: loadEnv().REDIS_URL,
 }));
 
+export const authConfig = registerAs('auth', () => {
+  const env = loadEnv();
+  return {
+    accessSecret: env.JWT_ACCESS_SECRET,
+    accessTtl: env.JWT_ACCESS_TTL,
+    issuer: env.JWT_ISSUER,
+    audience: env.JWT_AUDIENCE,
+    refreshTtlDays: env.REFRESH_TOKEN_TTL_DAYS,
+    cookieName: env.REFRESH_COOKIE_NAME,
+    cookieDomain: env.REFRESH_COOKIE_DOMAIN,
+    // On unless explicitly overridden in production: a refresh cookie sent over
+    // plaintext HTTP is the whole credential, in the clear.
+    cookieSecure: env.REFRESH_COOKIE_SECURE ?? env.NODE_ENV === 'production',
+    reuseGraceMs: env.REFRESH_REUSE_GRACE_MS,
+    rateLimitEnabled: env.AUTH_RATE_LIMIT_ENABLED,
+  };
+});
+
+export const oauthConfig = registerAs('oauth', () => {
+  const env = loadEnv();
+  return {
+    apiPublicUrl: env.API_PUBLIC_URL.replace(/\/+$/, ''),
+    webAppUrl: env.WEB_APP_URL.replace(/\/+$/, ''),
+    google:
+      env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
+        ? { clientId: env.GOOGLE_CLIENT_ID, clientSecret: env.GOOGLE_CLIENT_SECRET }
+        : undefined,
+  };
+});
+
 export const loggingConfig = registerAs('logging', () => {
   const env = loadEnv();
   return {
@@ -72,6 +102,8 @@ export const configNamespaces = [
   httpConfig,
   databaseConfig,
   redisConfig,
+  authConfig,
+  oauthConfig,
   loggingConfig,
   swaggerConfig,
 ];

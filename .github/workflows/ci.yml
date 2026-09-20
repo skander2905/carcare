@@ -97,6 +97,11 @@ jobs:
       REDIS_URL: redis://localhost:6379
       LOG_LEVEL: silent
       SWAGGER_ENABLED: 'false'
+      # A throwaway signing key for the suite. Not a secret — it signs tokens
+      # that only ever exist inside this job, and keeping it literal means a PR
+      # from a fork can run the integration tests too.
+      JWT_ACCESS_SECRET: ci-integration-suite-signing-key-not-a-secret
+      REFRESH_COOKIE_SECURE: 'false'
 
     steps:
       - uses: actions/checkout@v4

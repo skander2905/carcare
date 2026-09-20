@@ -1,6 +1,7 @@
 import { Global, Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { configNamespaces } from './configuration.js';
+import { envFilePaths } from './env-files.js';
 import { validateEnv } from './env.schema.js';
 
 /**
@@ -14,8 +15,9 @@ import { validateEnv } from './env.schema.js';
       isGlobal: true,
       cache: true,
       // Docker Compose and the platform supply real environment variables;
-      // .env is a local-development convenience only.
-      envFilePath: ['.env.local', '.env'],
+      // .env is a local-development convenience only. Absolute paths, because
+      // the working directory is the package and the file is at the repo root.
+      envFilePath: envFilePaths(),
       load: configNamespaces,
       validate: validateEnv,
     }),

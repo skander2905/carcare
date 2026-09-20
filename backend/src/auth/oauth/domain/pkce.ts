@@ -35,13 +35,31 @@ export function createState(): string {
 /**
  * Where to send the browser once the callback is done.
  *
- * Only a path is ever accepted. `returnTo` arrives from the query string, so an
- * absolute URL here would turn the callback into an open redirect on a page the
- * user has just been taught to trust.
+ * Validated by **resolving** it against the web app's own origin, not by
+ * pattern-matching the string. A regex has to out-guess the WHATWG URL parser,
+ * and it loses: `/\evil.example` is an off-site URL because the parser treats
+ * a backslash as a separator, and `/<tab>/evil.example` is one because the
+ * parser strips tab, newline and carriage return from anywhere in the input
+ * before it parses. Every one of those passes a "starts with a single slash"
+ * check.
+ *
+ * Resolving with the same parser that will later build the redirect closes the
+ * gap by construction: any quirk applies to both, so there is nothing left to
+ * disagree about. The **normalised** path is returned rather than the caller's
+ * string, so what gets stored is already canonical.
  */
-export function safeReturnPath(raw: string | undefined, fallback: string): string {
+export function safeReturnPath(raw: string | undefined, fallback: string, webAppUrl: string): string {
   if (!raw) return fallback;
-  // A single leading slash, so `//evil.example` — a protocol-relative URL that
-  // looks like a path — is rejected too.
-  return /^\/(?!\/)/.test(raw) ? raw : fallback;
+
+  try {
+    const base = new URL(webAppUrl);
+    const resolved = new URL(raw, base);
+
+    if (resolved.origin !== base.origin) return fallback;
+
+    return `${resolved.pathname}${resolved.search}${resolved.hash}`;
+  } catch {
+    // An unparseable base or a value the parser rejects outright.
+    return fallback;
+  }
 }

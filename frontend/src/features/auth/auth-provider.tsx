@@ -26,6 +26,14 @@ export interface AuthContextValue {
   login: (input: LoginInput) => Promise<void>;
   register: (input: RegisterInput) => Promise<void>;
   logout: () => Promise<void>;
+  /**
+   * Adopts a profile the caller has just saved.
+   *
+   * The signed-in user is held here, so a successful `PATCH /users/me` that
+   * only resets its own form leaves the greeting and the account menu showing
+   * the old name until a full reload.
+   */
+  adoptProfile: (user: AuthUser) => void;
 }
 
 export const AuthContext = createContext<AuthContextValue | null>(null);
@@ -107,9 +115,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const adoptProfile = useCallback((updated: AuthUser) => {
+    setUser(updated);
+  }, []);
+
   const value = useMemo<AuthContextValue>(
-    () => ({ user, status, login, register, logout }),
-    [user, status, login, register, logout],
+    () => ({ user, status, login, register, logout, adoptProfile }),
+    [user, status, login, register, logout, adoptProfile],
   );
 
   return <AuthContext value={value}>{children}</AuthContext>;

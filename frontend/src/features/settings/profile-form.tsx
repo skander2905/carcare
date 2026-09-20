@@ -28,7 +28,7 @@ type ProfileValues = z.infer<typeof profileSchema>;
  * actionable.
  */
 export function ProfileForm() {
-  const { user } = useAuth();
+  const { user, adoptProfile } = useAuth();
 
   const {
     register,
@@ -47,6 +47,9 @@ export function ProfileForm() {
     mutationFn: (values: ProfileValues) => api.patch<AuthUser>('/users/me', { body: values }),
     onSuccess: (updated) => {
       toast.success('Profile updated');
+      // The signed-in user lives in the auth context, so without this the
+      // greeting and the account menu keep the old name until a reload.
+      adoptProfile(updated);
       // Re-baselines the form so the Save button goes quiet again.
       reset({ displayName: updated.displayName, currency: updated.currency as ProfileValues['currency'] });
     },

@@ -116,28 +116,32 @@ export class AuthService {
     if (record.revokedAt) {
       // Recency alone does not make a spent token benign. A logout and a replay
       // revocation both revoke the whole family, and a token rotated moments
-      // before either of those is still "recently revoked" — so grace on its own
-      // would hand out a fresh token for a session that was deliberately ended,
-      // undoing the exact thing logout exists to do. A live sibling is what
-      // distinguishes a session that is still running from one that is over.
-      const familyIsLive = await this.refreshTokens.hasLiveToken(record.familyId);
+      // before either of those is still "recently revoked" — so grace on its
+      // own would hand out a fresh token for a session that was deliberately
+      // ended. Whether a live sibling remains is what tells a session that is
+      // still running from one that is over, and `continueSession` asks that
+      // question and inserts in the same transaction rather than in two steps.
+      if (isWithinReuseGrace(record.revokedAt, this.auth.reuseGraceMs)) {
+        const continued = await this.continueSession(record.userId, record.familyId, context);
+        if (continued) return continued;
 
-      if (familyIsLive && isWithinReuseGrace(record.revokedAt, this.auth.reuseGraceMs)) {
-        // Benign race: the other tab rotated this token a moment ago.
-        return this.continueSession(record.userId, record.familyId, context);
+        // The family died — logged out, or revoked by an earlier replay. Not an
+        // incident, just an old cookie.
+        throw new UnauthorizedException(INVALID_SESSION);
       }
 
-      if (familyIsLive) {
-        // The session is running and someone is presenting a token it already
-        // spent: two parties hold it, and only one of them is the real user.
-        const revoked = await this.refreshTokens.revokeFamily(record.familyId);
+      // Outside the window. If anything in the family was still live, two
+      // parties held this token and only one of them is the real user; a count
+      // of zero means the session was already over and there is no attack to
+      // report.
+      const revoked = await this.refreshTokens.revokeFamily(record.familyId);
+
+      if (revoked > 0) {
         this.logger.warn(
           `Refresh token replay detected for user ${record.userId}; revoked ${revoked} token(s) in family ${record.familyId}`,
         );
       }
 
-      // A dead family needs no revoking and is not an incident — it is an old
-      // cookie from a session that already ended.
       throw new UnauthorizedException(INVALID_SESSION);
     }
 
@@ -147,8 +151,15 @@ export class AuthService {
     const rotated = await this.refreshTokens.rotate(record.id, replacement.record);
 
     // Lost the race to a concurrent refresh between the read and the update.
-    // Same benign case as the grace window above, caught one step later.
-    if (!rotated) return this.continueSession(record.userId, record.familyId, context);
+    // Same benign case as the grace window above, caught one step later — and
+    // subject to the same liveness check, so a logout landing in between
+    // cannot be undone here either.
+    if (!rotated) {
+      const continued = await this.continueSession(record.userId, record.familyId, context);
+      if (continued) return continued;
+
+      throw new UnauthorizedException(INVALID_SESSION);
+    }
 
     const user = await this.requireUser(record.userId);
     return this.issue(user, replacement.plaintext, replacement.record.expiresAt);
@@ -198,14 +209,22 @@ export class AuthService {
     return this.issue(user, plaintext, record.expiresAt);
   }
 
-  /** A concurrent refresh: same family, new token, nothing revoked. */
+  /**
+   * A concurrent refresh: same family, new token, nothing revoked.
+   *
+   * Returns `null` when the family turned out to be over, which the repository
+   * decides and acts on atomically — so a logout cannot slip between the check
+   * and the insert.
+   */
   private async continueSession(
     userId: string,
     familyId: string,
     context: SessionContext,
-  ): Promise<IssuedSession> {
+  ): Promise<IssuedSession | null> {
     const { plaintext, record } = this.buildTokenRecord(userId, familyId, context);
-    await this.refreshTokens.create(record);
+
+    const created = await this.refreshTokens.createIfFamilyLive(record);
+    if (!created) return null;
 
     const user = await this.requireUser(userId);
     return this.issue(user, plaintext, record.expiresAt);

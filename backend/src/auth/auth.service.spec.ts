@@ -1,4 +1,4 @@
-import { ConflictException, UnauthorizedException } from '@nestjs/common';
+import { ConflictException, Logger, UnauthorizedException } from '@nestjs/common';
 import { type JwtService } from '@nestjs/jwt';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { type AuthConfig } from '../config/config.types.js';
@@ -77,7 +77,7 @@ const buildMocks = () => ({
     findByHash: vi.fn<(hash: string) => Promise<TokenRow | null>>(),
     rotate: vi.fn<(id: string, replacement: Record<string, unknown>) => Promise<TokenRow | null>>(),
     revokeFamily: vi.fn<(familyId: string) => Promise<number>>(),
-    hasLiveToken: vi.fn<(familyId: string) => Promise<boolean>>(),
+    createIfFamilyLive: vi.fn<(replacement: Record<string, unknown>) => Promise<TokenRow | null>>(),
   },
   jwt: {
     signAsync: vi.fn<(payload: unknown) => Promise<string>>(),
@@ -90,6 +90,7 @@ describe('AuthService', () => {
   let refreshTokens: ReturnType<typeof buildMocks>['refreshTokens'];
   let jwt: ReturnType<typeof buildMocks>['jwt'];
   let service: AuthService;
+  let loggerWarn: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
     ({ users, refreshTokens, jwt } = buildMocks());
@@ -97,11 +98,14 @@ describe('AuthService', () => {
     refreshTokens.create.mockImplementation((data) => Promise.resolve(data as TokenRow));
     refreshTokens.revokeFamily.mockResolvedValue(1);
     // The default is a session that is still running; the tests that care
-    // about an ended one say so explicitly.
-    refreshTokens.hasLiveToken.mockResolvedValue(true);
+    // about an ended one make the atomic insert report otherwise.
+    refreshTokens.createIfFamilyLive.mockImplementation((data) => Promise.resolve(data as TokenRow));
     jwt.signAsync.mockResolvedValue('signed.access.token');
     // 15 minutes, matching the configured TTL.
     jwt.decode.mockReturnValue({ iat: 1_000, exp: 1_900 });
+
+    vi.restoreAllMocks();
+    loggerWarn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
 
     service = new AuthService(
       users as unknown as UsersService,
@@ -229,9 +233,9 @@ describe('AuthService', () => {
         // Rotated an hour ago: far outside any plausible tab race.
         buildTokenRow({ revokedAt: new Date(Date.now() - 3_600_000) }),
       );
-      // The session is still running, which is what makes this a theft rather
-      // than a stale cookie.
-      refreshTokens.hasLiveToken.mockResolvedValue(true);
+      // Something was still live, which is what makes this a theft rather than
+      // a stale cookie.
+      refreshTokens.revokeFamily.mockResolvedValue(1);
 
       await expect(service.refresh('presented-token', CONTEXT)).rejects.toThrow(UnauthorizedException);
 
@@ -247,7 +251,10 @@ describe('AuthService', () => {
 
       // Two tabs refreshing at once must not log the user out.
       expect(refreshTokens.revokeFamily).not.toHaveBeenCalled();
-      const row = refreshTokens.create.mock.calls[0][0] as { familyId: string; tokenHash: string };
+      const row = refreshTokens.createIfFamilyLive.mock.calls[0][0] as {
+        familyId: string;
+        tokenHash: string;
+      };
       expect(row.familyId).toBe('family-1');
       expect(hashToken(session.refreshToken)).toBe(row.tokenHash);
     });
@@ -257,8 +264,8 @@ describe('AuthService', () => {
         // Rotated a second ago — well inside the grace window.
         buildTokenRow({ revokedAt: new Date(Date.now() - 1_000) }),
       );
-      // Logout revoked every token in the family, so nothing is live.
-      refreshTokens.hasLiveToken.mockResolvedValue(false);
+      // Logout revoked every token in the family, so the atomic insert refuses.
+      refreshTokens.createIfFamilyLive.mockResolvedValue(null);
 
       await expect(service.refresh('presented-token', CONTEXT)).rejects.toThrow(UnauthorizedException);
 
@@ -271,13 +278,14 @@ describe('AuthService', () => {
       refreshTokens.findByHash.mockResolvedValue(
         buildTokenRow({ revokedAt: new Date(Date.now() - 3_600_000) }),
       );
-      refreshTokens.hasLiveToken.mockResolvedValue(false);
+      // Nothing was live, so the revoke is a no-op.
+      refreshTokens.revokeFamily.mockResolvedValue(0);
 
       await expect(service.refresh('presented-token', CONTEXT)).rejects.toThrow(UnauthorizedException);
 
-      // Nothing left to revoke, and an old cookie from last week's logout is
-      // not an incident worth paging anyone about.
-      expect(refreshTokens.revokeFamily).not.toHaveBeenCalled();
+      // An old cookie from last week's logout is not an incident worth paging
+      // anyone about, so it must not be logged as a detected replay.
+      expect(loggerWarn).not.toHaveBeenCalledWith(expect.stringContaining('replay detected'));
     });
 
     it('recovers when a concurrent request wins the rotation race', async () => {

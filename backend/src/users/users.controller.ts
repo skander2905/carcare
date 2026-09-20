@@ -23,9 +23,7 @@ export class UsersController {
   @ApiOperation({ summary: 'The authenticated user' })
   @ApiOkResponse({ type: UserResponse })
   async findMe(@CurrentUser() current: AuthenticatedUser): Promise<UserResponse> {
-    const user = await this.users.findById(current.id);
-    // The access token is valid, so the row existed 15 minutes ago at worst.
-    return toUserResponse(user!);
+    return toUserResponse(await this.users.requireById(current.id));
   }
 
   @Patch('me')

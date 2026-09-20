@@ -9,6 +9,18 @@ const KEY_PREFIX = 'oauth:state:';
 export interface OAuthState {
   provider: string;
   codeVerifier: string;
+  /**
+   * SHA-256 of a nonce handed to the browser in an httpOnly cookie when the
+   * flow started.
+   *
+   * Single use is not the same as attributable. Without this, an attacker can
+   * start a flow for *their own* Google account, capture the callback URL
+   * before following it, and send that link to a victim — whose browser then
+   * completes it and is issued a refresh cookie for the attacker's account.
+   * Everything the victim files afterwards lands in the attacker's records.
+   * Only the browser holding the nonce can finish a flow it started.
+   */
+  nonceHash: string;
   /** In-app path to return the browser to once the callback completes. */
   returnTo: string;
   /**

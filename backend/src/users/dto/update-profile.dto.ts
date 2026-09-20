@@ -1,6 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsIn, IsOptional, IsString, Length, Matches } from 'class-validator';
+import { IsIn, IsString, Length, Matches } from 'class-validator';
+import { IsOptionalProperty } from '../../common/validation/optional.decorator.js';
 
 const trimmed = Transform(({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value,
@@ -21,24 +22,24 @@ export const SUPPORTED_LOCALES = ['en', 'fr', 'ar'] as const;
  */
 export class UpdateProfileDto {
   @ApiPropertyOptional({ example: 'Sam Ben Ali', minLength: 1, maxLength: 120 })
-  @IsOptional()
+  @IsOptionalProperty()
   @trimmed
   @IsString()
   @Length(1, 120)
   displayName?: string;
 
   @ApiPropertyOptional({ example: 'TND', enum: SUPPORTED_CURRENCIES })
-  @IsOptional()
+  @IsOptionalProperty()
   @IsIn(SUPPORTED_CURRENCIES)
   currency?: (typeof SUPPORTED_CURRENCIES)[number];
 
   @ApiPropertyOptional({ example: 'en', enum: SUPPORTED_LOCALES })
-  @IsOptional()
+  @IsOptionalProperty()
   @IsIn(SUPPORTED_LOCALES)
   locale?: (typeof SUPPORTED_LOCALES)[number];
 
   @ApiPropertyOptional({ example: 'Africa/Tunis', maxLength: 64 })
-  @IsOptional()
+  @IsOptionalProperty()
   @trimmed
   @IsString()
   @Length(1, 64)

@@ -39,6 +39,20 @@ const listFromEnv = (defaultValue: string) =>
         .filter((entry) => entry.length > 0),
     );
 
+/**
+ * Absent, or a real value — but never an empty string.
+ *
+ * `docker-compose.yml` passes optional variables through as `${VAR:-}`, which
+ * exports them as `""` rather than leaving them unset. Plain `.optional()` does
+ * not treat `""` as absent, so a password-only Compose deployment would fail
+ * validation at boot instead of simply running with no providers.
+ */
+const optionalNonEmpty = () =>
+  z
+    .string()
+    .optional()
+    .transform((value) => (value === undefined || value.trim() === '' ? undefined : value));
+
 export const LOG_LEVELS = ['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent'] as const;
 
 /**
@@ -117,8 +131,8 @@ export const envSchema = z.object({
    * registered, the button does not render, and the rest of the API is
    * unaffected — a fresh clone and CI must not need credentials to boot.
    */
-  GOOGLE_CLIENT_ID: z.string().min(1).optional(),
-  GOOGLE_CLIENT_SECRET: z.string().min(1).optional(),
+  GOOGLE_CLIENT_ID: optionalNonEmpty(),
+  GOOGLE_CLIENT_SECRET: optionalNonEmpty(),
 
   /** Escape hatch for tests and local debugging; never turn this off in production. */
   AUTH_RATE_LIMIT_ENABLED: booleanFromEnv(true),

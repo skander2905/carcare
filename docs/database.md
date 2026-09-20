@@ -230,6 +230,7 @@ price. Storing it would freeze a number that should move as better data arrives.
 | `UserRole`         | `USER`, `ADMIN`                                                                                                                                                            |
 | `VehicleRole`      | `OWNER`, `EDITOR`, `VIEWER`                                                                                                                                                |
 | `FuelType`         | `PETROL`, `DIESEL`, `HYBRID`, `ELECTRIC`, `LPG`, `OTHER`                                                                                                                   |
+| `Transmission`     | `MANUAL`, `AUTOMATIC`, `SEMI_AUTOMATIC`, `CVT`                                                                                                                             |
 | `ExpenseCategory`  | `FUEL`, `MAINTENANCE`, `REPAIR`, `INSURANCE`, `TAX`, `PARKING`, `TOLL`, `CLEANING`, `ACCESSORIES`, `TIRES`, `INSPECTION`, `OTHER`                                          |
 | `ExpenseSource`    | `MANUAL`, `FUEL`, `MAINTENANCE`                                                                                                                                            |
 | `MaintenanceType`  | `OIL_CHANGE`, `OIL_FILTER`, `AIR_FILTER`, `CABIN_FILTER`, `BRAKE_PADS`, `BRAKE_DISCS`, `TIRES`, `BATTERY`, `COOLANT`, `TRANSMISSION`, `TIMING_BELT`, `INSPECTION`, `OTHER` |

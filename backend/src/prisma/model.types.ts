@@ -10,4 +10,7 @@ export type {
   UserModel as User,
   RefreshTokenModel as RefreshToken,
   OAuthAccountModel as OAuthAccount,
+  VehicleModel as Vehicle,
+  VehicleMemberModel as VehicleMember,
+  OdometerReadingModel as OdometerReading,
 } from '../generated/prisma/models.js';

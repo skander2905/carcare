@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { LayoutDashboard, LogOut, Settings } from 'lucide-react';
+import { Car, LayoutDashboard, LogOut, Settings } from 'lucide-react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
@@ -85,6 +85,13 @@ export function UserMenu() {
           <Link href="/dashboard">
             <LayoutDashboard className="size-4" aria-hidden />
             Dashboard
+          </Link>
+        </DropdownMenuItem>
+
+        <DropdownMenuItem asChild>
+          <Link href="/vehicles">
+            <Car className="size-4" aria-hidden />
+            Vehicles
           </Link>
         </DropdownMenuItem>
 

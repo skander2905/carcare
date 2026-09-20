@@ -46,8 +46,10 @@ model User {
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
-  refreshTokens RefreshToken[]
-  oauthAccounts OAuthAccount[]
+  refreshTokens  RefreshToken[]
+  oauthAccounts  OAuthAccount[]
+  vehicles       Vehicle[]
+  vehicleMembers VehicleMember[]
 
   @@map("users")
 }
@@ -124,4 +126,149 @@ model OAuthAccount {
   @@unique([provider, providerAccountId])
   @@index([userId])
   @@map("oauth_accounts")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 3 — vehicles, membership and the mileage timeline
+// ---------------------------------------------------------------------------
+
+/// Per-vehicle permission. Distinct from `UserRole`, which is platform-wide.
+///
+/// V1 only ever creates `OWNER` rows. `EDITOR` and `VIEWER` exist now so that
+/// sharing later is an insert plus an invite endpoint, rather than a migration
+/// that rewrites every access check. See docs/decisions.md ADR-006.
+enum VehicleRole {
+  OWNER
+  EDITOR
+  VIEWER
+}
+
+enum FuelType {
+  PETROL
+  DIESEL
+  HYBRID
+  ELECTRIC
+  LPG
+  OTHER
+}
+
+enum Transmission {
+  MANUAL
+  AUTOMATIC
+  SEMI_AUTOMATIC
+  CVT
+}
+
+/// Where a mileage reading came from. Phase 3 only writes `MANUAL`; the rest
+/// arrive as fuel, expense, maintenance and trip records start carrying
+/// odometer values.
+enum OdometerSource {
+  MANUAL
+  FUEL
+  EXPENSE
+  MAINTENANCE
+  TRIP
+}
+
+model Vehicle {
+  id      String @id @default(uuid(7)) @db.Uuid
+  /// Kept alongside `VehicleMember` rather than replaced by it: the owner is a
+  /// property of the vehicle (who bought it), while membership is a property of
+  /// access. Authorisation never reads this column — see ADR-006.
+  ownerId String @db.Uuid
+  owner   User   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  make         String  @db.VarChar(64)
+  model        String  @db.VarChar(64)
+  year         Int     @db.SmallInt
+  licensePlate String  @db.VarChar(32)
+  /// 17 characters by ISO 3779. Optional: plenty of owners never record it.
+  vin          String? @db.VarChar(17)
+
+  fuelType     FuelType
+  /// Displacement in litres, e.g. 1.6. Meaningless for an EV, hence optional.
+  engineSize   Decimal?      @db.Decimal(3, 1)
+  transmission Transmission?
+
+  /// Denormalised from `OdometerReading`, because the dashboard reads it on
+  /// every page load and a MAX() subquery per vehicle is wasteful. Written only
+  /// by OdometerService, inside the same transaction as the reading itself.
+  currentOdometerKm Int @default(0)
+
+  purchaseDate  DateTime? @db.Timestamptz(3)
+  /// Excluded from cost-per-kilometre by default and reported separately —
+  /// including a 40,000 TND purchase makes the first month meaningless (ADR-012).
+  purchasePrice Decimal?  @db.Decimal(12, 3)
+
+  color String? @db.VarChar(32)
+  notes String? @db.Text
+
+  /// Set when a vehicle is sold or retired. Archiving keeps its cost history
+  /// intact and out of the default list; deleting discards the history, which
+  /// is a different and much rarer intent.
+  archivedAt DateTime? @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  members          VehicleMember[]
+  odometerReadings OdometerReading[]
+
+  @@unique([ownerId, licensePlate])
+  @@index([ownerId])
+  @@index([ownerId, archivedAt])
+  @@map("vehicles")
+}
+
+/// The single authority on who may reach a vehicle.
+///
+/// Every vehicle-scoped request resolves through here before it reads anything,
+/// so no endpoint ever trusts an id from the client. See ADR-006.
+model VehicleMember {
+  id        String  @id @default(uuid(7)) @db.Uuid
+  vehicleId String  @db.Uuid
+  vehicle   Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  userId    String  @db.Uuid
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  role VehicleRole @default(VIEWER)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  /// One membership per person per vehicle; the database refuses a duplicate
+  /// rather than trusting every call site to check first.
+  @@unique([vehicleId, userId])
+  @@index([userId])
+  @@map("vehicle_members")
+}
+
+/// The mileage timeline.
+///
+/// Its own table because mileage arrives from five places, and because "how far
+/// did this car travel between two dates" — the denominator of cost per
+/// kilometre — must be one indexed range scan rather than a scan of every cost
+/// record. See docs/database.md §3.2.
+model OdometerReading {
+  id        String  @id @default(uuid(7)) @db.Uuid
+  vehicleId String  @db.Uuid
+  vehicle   Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  recordedAt DateTime @db.Timestamptz(3)
+  odometerKm Int
+
+  source   OdometerSource @default(MANUAL)
+  /// The fuel entry, expense or maintenance record that produced this reading.
+  /// Not a foreign key: it points into whichever table `source` names.
+  sourceId String?        @db.Uuid
+
+  notes String? @db.VarChar(500)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  /// `(vehicleId, recordedAt)` serves the mileage chart and date-range
+  /// distance; `(vehicleId, odometerKm)` serves "the reading before this one",
+  /// which the full-to-full consumption engine needs in Phase 5.
+  @@index([vehicleId, recordedAt])
+  @@index([vehicleId, odometerKm])
+  @@map("odometer_readings")
 }

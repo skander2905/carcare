@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { type OAuthAccount, type User } from '../../prisma/model.types.js';
+import { type OAuthConfig } from '../../config/config.types.js';
 import { type UsersService } from '../../users/users.service.js';
 import { type AuthService, type SessionContext } from '../auth.service.js';
 import { OAUTH_ERRORS, OAuthService } from './oauth.service.js';
@@ -8,8 +9,12 @@ import { type OAuthStateService } from './oauth-state.service.js';
 import { type OAuthAccountRepository } from './oauth-account.repository.js';
 import { type ProviderRegistry } from './providers/provider.registry.js';
 import { type ProviderIdentity } from './providers/oauth-provider.types.js';
+import { hashToken } from '../domain/tokens.js';
 
 const CONTEXT: SessionContext = { userAgent: 'vitest', ipAddress: '127.0.0.1' };
+
+/** The nonce the browser holds; only its hash is stored with the state. */
+const NONCE = 'browser-nonce';
 
 const IDENTITY: ProviderIdentity = {
   providerAccountId: 'google-sub-123',
@@ -97,6 +102,7 @@ describe('OAuthService', () => {
       m.accounts as unknown as OAuthAccountRepository,
       m.users as unknown as UsersService,
       m.auth as unknown as AuthService,
+      { webAppUrl: 'http://localhost:3000' } as OAuthConfig,
     );
   });
 
@@ -118,6 +124,24 @@ describe('OAuthService', () => {
       expect(stored.returnTo).toBe('/dashboard');
     });
 
+    it('issues a nonce and stores only its hash', async () => {
+      const { nonce } = await service.start('google', undefined);
+
+      const [, stored] = m.states.save.mock.calls[0] as [string, { nonceHash: string }];
+      expect(nonce).toMatch(/^[A-Za-z0-9_-]{43}$/);
+      // The browser keeps the nonce; a database or Redis dump yields only the
+      // hash, which cannot be presented.
+      expect(stored.nonceHash).toBe(hashToken(nonce));
+      expect(stored.nonceHash).not.toBe(nonce);
+    });
+
+    it('issues a different nonce for every flow', async () => {
+      const first = await service.start('google', undefined);
+      const second = await service.start('google', undefined);
+
+      expect(first.nonce).not.toBe(second.nonce);
+    });
+
     it('records who asked, when linking to an existing account', async () => {
       await service.start('google', undefined, 'user-7');
 
@@ -132,29 +156,71 @@ describe('OAuthService', () => {
     it('rejects a state that was never issued', async () => {
       m.states.consume.mockResolvedValue(null);
 
-      await expect(service.complete('google', 'code', 'forged', CONTEXT)).rejects.toThrow(
+      await expect(service.complete('google', 'code', 'forged', NONCE, CONTEXT)).rejects.toThrow(
         BadRequestException,
       );
       expect(googleProvider.exchangeCode).not.toHaveBeenCalled();
     });
 
-    it('rejects a state issued for a different provider', async () => {
-      m.states.consume.mockResolvedValue({ provider: 'apple', codeVerifier: 'v', returnTo: '/' });
+    it('rejects a callback from a browser that did not start the flow', async () => {
+      m.states.consume.mockResolvedValue({
+        provider: 'google',
+        codeVerifier: 'v',
+        returnTo: '/dashboard',
+        nonceHash: hashToken('the-real-browser'),
+      });
 
-      await expect(service.complete('google', 'code', 'state', CONTEXT)).rejects.toThrow(BadRequestException);
+      // The login-CSRF case: an attacker starts a flow for their own account,
+      // captures the callback URL, and sends it to a victim. The state is
+      // genuine and unused — only the nonce cookie says whose flow it was.
+      await expect(service.complete('google', 'code', 'state', 'someone-elses', CONTEXT)).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(googleProvider.exchangeCode).not.toHaveBeenCalled();
+    });
+
+    it('rejects a callback presenting no nonce at all', async () => {
+      m.states.consume.mockResolvedValue({
+        provider: 'google',
+        codeVerifier: 'v',
+        returnTo: '/dashboard',
+        nonceHash: hashToken(NONCE),
+      });
+
+      await expect(service.complete('google', 'code', 'state', undefined, CONTEXT)).rejects.toThrow(
+        BadRequestException,
+      );
+    });
+
+    it('rejects a state issued for a different provider', async () => {
+      m.states.consume.mockResolvedValue({
+        provider: 'apple',
+        codeVerifier: 'v',
+        returnTo: '/',
+        nonceHash: hashToken(NONCE),
+      });
+
+      await expect(service.complete('google', 'code', 'state', NONCE, CONTEXT)).rejects.toThrow(
+        BadRequestException,
+      );
     });
   });
 
   describe('complete — signing in', () => {
     beforeEach(() => {
-      m.states.consume.mockResolvedValue({ provider: 'google', codeVerifier: 'v', returnTo: '/dashboard' });
+      m.states.consume.mockResolvedValue({
+        provider: 'google',
+        codeVerifier: 'v',
+        returnTo: '/dashboard',
+        nonceHash: hashToken(NONCE),
+      });
     });
 
     it('signs in an already-linked identity', async () => {
       const user = buildUser();
       m.accounts.findByProviderAccount.mockResolvedValue({ ...buildAccount(), user });
 
-      const result = await service.complete('google', 'code', 'state', CONTEXT);
+      const result = await service.complete('google', 'code', 'state', NONCE, CONTEXT);
 
       expect(m.auth.startSessionFor).toHaveBeenCalledWith(user, CONTEXT);
       expect(result.returnTo).toBe('/dashboard');
@@ -166,7 +232,7 @@ describe('OAuthService', () => {
       m.users.findByEmail.mockResolvedValue(null);
       m.accounts.createUserWithAccount.mockResolvedValue(buildUser());
 
-      await service.complete('google', 'code', 'state', CONTEXT);
+      await service.complete('google', 'code', 'state', NONCE, CONTEXT);
 
       const [user, account] = m.accounts.createUserWithAccount.mock.calls[0] as [
         { email: string; displayName: string },
@@ -182,7 +248,7 @@ describe('OAuthService', () => {
       m.users.findByEmail.mockResolvedValue(null);
       m.accounts.createUserWithAccount.mockResolvedValue(buildUser());
 
-      await service.complete('google', 'code', 'state', CONTEXT);
+      await service.complete('google', 'code', 'state', NONCE, CONTEXT);
 
       const [user] = m.accounts.createUserWithAccount.mock.calls[0] as [{ displayName: string }, unknown];
       expect(user.displayName).toBe('sam');
@@ -197,7 +263,7 @@ describe('OAuthService', () => {
       m.accounts.findByProviderAccount.mockResolvedValue(null);
       m.users.findByEmail.mockResolvedValue(buildUser({ passwordHash: '$argon2id$...' }));
 
-      await expect(service.complete('google', 'code', 'state', CONTEXT)).rejects.toThrow(
+      await expect(service.complete('google', 'code', 'state', NONCE, CONTEXT)).rejects.toThrow(
         new ConflictException(OAUTH_ERRORS.emailTaken),
       );
 
@@ -216,7 +282,7 @@ describe('OAuthService', () => {
         user,
       });
 
-      await service.complete('google', 'code', 'state', CONTEXT);
+      await service.complete('google', 'code', 'state', NONCE, CONTEXT);
 
       expect(m.users.findByEmail).not.toHaveBeenCalled();
       expect(m.auth.startSessionFor).toHaveBeenCalledWith(user, CONTEXT);
@@ -232,13 +298,14 @@ describe('OAuthService', () => {
         codeVerifier: 'v',
         returnTo: '/settings',
         linkUserId: 'user-1',
+        nonceHash: hashToken(NONCE),
       });
     });
 
     it('attaches the provider without starting a new session', async () => {
       m.accounts.findByProviderAccount.mockResolvedValue(null);
 
-      const result = await service.complete('google', 'code', 'state', CONTEXT);
+      const result = await service.complete('google', 'code', 'state', NONCE, CONTEXT);
 
       expect(m.accounts.create).toHaveBeenCalledWith({
         userId: 'user-1',
@@ -258,7 +325,7 @@ describe('OAuthService', () => {
         user: buildUser(),
       });
 
-      await service.complete('google', 'code', 'state', CONTEXT);
+      await service.complete('google', 'code', 'state', NONCE, CONTEXT);
 
       expect(m.accounts.create).not.toHaveBeenCalled();
     });
@@ -269,7 +336,9 @@ describe('OAuthService', () => {
         user: buildUser({ id: 'someone-else' }),
       });
 
-      await expect(service.complete('google', 'code', 'state', CONTEXT)).rejects.toThrow(ConflictException);
+      await expect(service.complete('google', 'code', 'state', NONCE, CONTEXT)).rejects.toThrow(
+        ConflictException,
+      );
     });
   });
 

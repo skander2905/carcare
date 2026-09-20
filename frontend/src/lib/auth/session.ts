@@ -1,4 +1,3 @@
-import { ApiError } from '@/lib/api/client';
 import { authApi } from './auth-api';
 import { clearAccessToken, setAccessToken } from './token-store';
 
@@ -15,17 +14,32 @@ import { clearAccessToken, setAccessToken } from './token-store';
  */
 let inFlight: Promise<boolean> | null = null;
 
-async function rotate(): Promise<boolean> {
+/**
+ * Bumped whenever the session ends.
+ *
+ * Clearing `inFlight` does not cancel the request already in the air. Without a
+ * generation to compare against, a refresh that was mid-flight when the user
+ * signed out would still call `setAccessToken` when it landed — quietly putting
+ * a working token back into a session that is supposed to be over, on a machine
+ * someone has just walked away from.
+ */
+let generation = 0;
+
+async function rotate(startedAt: number): Promise<boolean> {
   try {
     const payload = await authApi.refresh();
+
+    // The session ended while this was in flight; its answer belongs to a
+    // session that no longer exists.
+    if (startedAt !== generation) return false;
+
     setAccessToken(payload);
     return true;
-  } catch (error) {
+  } catch {
     // A 401 is the ordinary "not signed in" answer on a cold load, not a fault.
-    // Anything else (network, 500) is also unrecoverable here, and the caller
-    // decides what to show.
-    clearAccessToken();
-    if (error instanceof ApiError && error.isUnauthorized) return false;
+    // Anything else (network, 500) is equally unrecoverable here, and the
+    // caller decides what to show.
+    if (startedAt === generation) clearAccessToken();
     return false;
   }
 }
@@ -35,10 +49,12 @@ async function rotate(): Promise<boolean> {
  * Resolves `true` when a usable token is now in the store.
  */
 export function refreshSession(): Promise<boolean> {
-  inFlight ??= rotate().finally(() => {
-    // Cleared only once settled, so the *next* 401 starts a new rotation
-    // rather than reusing this one's answer forever.
-    inFlight = null;
+  const startedAt = generation;
+
+  inFlight ??= rotate(startedAt).finally(() => {
+    // Only retire this flight if it is still the current one — a newer refresh
+    // started after a sign-out must not be cleared by an older one settling.
+    if (startedAt === generation) inFlight = null;
   });
 
   return inFlight;
@@ -46,6 +62,7 @@ export function refreshSession(): Promise<boolean> {
 
 /** Drops the local session. The server-side revocation is `authApi.logout`. */
 export function endSession(): void {
+  generation += 1;
   inFlight = null;
   clearAccessToken();
 }

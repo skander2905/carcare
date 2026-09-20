@@ -51,26 +51,54 @@ describe('createState', () => {
  * redirect.
  */
 describe('safeReturnPath', () => {
+  const WEB = 'http://localhost:3000';
+  const safe = (raw: string | undefined) => safeReturnPath(raw, '/dashboard', WEB);
+
   it('falls back when nothing was asked for', () => {
-    expect(safeReturnPath(undefined, '/dashboard')).toBe('/dashboard');
-    expect(safeReturnPath('', '/dashboard')).toBe('/dashboard');
+    expect(safe(undefined)).toBe('/dashboard');
+    expect(safe('')).toBe('/dashboard');
   });
 
-  it('keeps an ordinary in-app path', () => {
-    expect(safeReturnPath('/vehicles/123', '/dashboard')).toBe('/vehicles/123');
+  it('keeps an ordinary in-app path, with its query and fragment', () => {
+    expect(safe('/vehicles/123')).toBe('/vehicles/123');
+    expect(safe('/vehicles?page=2#top')).toBe('/vehicles?page=2#top');
   });
 
   it('refuses another origin', () => {
-    expect(safeReturnPath('https://evil.example', '/dashboard')).toBe('/dashboard');
-    expect(safeReturnPath('http://evil.example/x', '/dashboard')).toBe('/dashboard');
+    expect(safe('https://evil.example')).toBe('/dashboard');
+    expect(safe('http://evil.example/x')).toBe('/dashboard');
   });
 
   it('refuses a protocol-relative URL that looks like a path', () => {
-    expect(safeReturnPath('//evil.example', '/dashboard')).toBe('/dashboard');
-    expect(safeReturnPath('///evil.example', '/dashboard')).toBe('/dashboard');
+    expect(safe('//evil.example')).toBe('/dashboard');
+    expect(safe('///evil.example')).toBe('/dashboard');
+  });
+
+  /*
+   * The bypasses a "starts with a single slash" regex lets through. The WHATWG
+   * URL parser treats a backslash as a separator for http(s), and strips tab,
+   * newline and carriage return from anywhere in the input before parsing — so
+   * each of these resolves to a different origin while looking like a path.
+   */
+  it('refuses a backslash host', () => {
+    expect(safe('/\\evil.example')).toBe('/dashboard');
+    expect(safe('\\\\evil.example')).toBe('/dashboard');
+  });
+
+  it('refuses a host smuggled past the parser with a control character', () => {
+    expect(safe('/\t/evil.example')).toBe('/dashboard');
+    expect(safe('/\n/evil.example')).toBe('/dashboard');
+    expect(safe('/\r/evil.example')).toBe('/dashboard');
   });
 
   it('refuses a javascript: destination', () => {
-    expect(safeReturnPath('javascript:alert(1)', '/dashboard')).toBe('/dashboard');
+    expect(safe('javascript:alert(1)')).toBe('/dashboard');
+  });
+
+  it('normalises what it returns, so nothing is reinterpreted later', () => {
+    // The stored value is already canonical, so the redirect that is built
+    // from it cannot resolve to something else.
+    expect(safe('/a/../vehicles')).toBe('/vehicles');
+    expect(safe('http://localhost:3000/vehicles')).toBe('/vehicles');
   });
 });

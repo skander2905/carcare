@@ -88,6 +88,42 @@ describe('refreshSession', () => {
   });
 });
 
+describe('endSession during a refresh', () => {
+  /**
+   * Signing out on a shared machine has to stay signed out. Clearing the
+   * in-flight promise does not cancel the request, so without a generation
+   * check the response would land afterwards and restore a working token.
+   */
+  it('ignores a refresh that lands after sign-out', async () => {
+    const gate = deferred<{ accessToken: string; expiresIn: number }>();
+    refreshMock.mockReturnValue(gate.promise);
+
+    const pending = refreshSession();
+    endSession();
+    gate.resolve({ accessToken: 'too-late', expiresIn: 900 });
+
+    await expect(pending).resolves.toBe(false);
+    expect(getAccessToken()).toBeNull();
+  });
+
+  it('lets a refresh started after sign-out succeed', async () => {
+    const stale = deferred<{ accessToken: string; expiresIn: number }>();
+    refreshMock.mockReturnValueOnce(stale.promise);
+
+    const abandoned = refreshSession();
+    endSession();
+
+    refreshMock.mockResolvedValueOnce({ accessToken: 'fresh', expiresIn: 900 });
+    await expect(refreshSession()).resolves.toBe(true);
+
+    // The abandoned one settling must not wipe the newer session.
+    stale.resolve({ accessToken: 'too-late', expiresIn: 900 });
+    await abandoned;
+
+    expect(getAccessToken()).toBe('fresh');
+  });
+});
+
 describe('endSession', () => {
   it('drops the local token', async () => {
     refreshMock.mockResolvedValue({ accessToken: 'fresh-token', expiresIn: 900 });

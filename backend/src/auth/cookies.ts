@@ -34,3 +34,27 @@ export function refreshCookieOptions(
     ...(maxAgeMs === undefined ? {} : { maxAge: maxAgeMs }),
   };
 }
+
+/**
+ * Short-lived cookie binding an OAuth flow to the browser that began it.
+ *
+ * Scoped to the auth path and `SameSite=Lax`, which still travels on the
+ * top-level navigation the provider sends back. Its lifetime matches the Redis
+ * state's, so a stale one cannot outlive the flow it belongs to.
+ */
+export const OAUTH_NONCE_COOKIE = 'carcare_oauth_nonce';
+
+export function oauthNonceCookieOptions(
+  auth: AuthConfig,
+  globalPrefix: string,
+  maxAgeMs?: number,
+): CookieOptions {
+  return {
+    httpOnly: true,
+    secure: auth.cookieSecure,
+    sameSite: 'lax',
+    path: refreshCookiePath(globalPrefix),
+    ...(auth.cookieDomain ? { domain: auth.cookieDomain } : {}),
+    ...(maxAgeMs === undefined ? {} : { maxAge: maxAgeMs }),
+  };
+}

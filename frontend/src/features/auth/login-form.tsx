@@ -18,14 +18,34 @@ import { useAuth } from './use-auth';
 const DEFAULT_DESTINATION = '/dashboard';
 
 /**
- * An open redirect is the classic bug in a `?next=` parameter: a crafted
- * `?next=https://evil.example` turns our own login page into a convincing
- * stepping stone. Only a path beginning with a single slash is accepted, which
- * also rules out protocol-relative `//evil.example`.
+ * Where to land after signing in.
+ *
+ * Validated by **resolving** against this page's own origin rather than by
+ * matching the string. A "starts with one slash" regex loses to the WHATWG URL
+ * parser: `/\evil.example` is off-site because a backslash is a separator, and
+ * `/<tab>/evil.example` is off-site because tab, newline and carriage return
+ * are stripped from anywhere in the input before parsing. Both look like paths.
+ *
+ * This is the same rule the API applies to the OAuth `returnTo`, for the same
+ * reason — a real login page that forwards somewhere else afterwards is far
+ * more convincing than any lookalike domain.
  */
-export function safeNext(raw: string | null): string {
+export function safeNext(raw: string | null, origin?: string): string {
   if (!raw) return DEFAULT_DESTINATION;
-  return /^\/(?!\/)/.test(raw) ? raw : DEFAULT_DESTINATION;
+
+  const base = origin ?? (typeof window === 'undefined' ? 'http://localhost' : window.location.origin);
+
+  try {
+    const from = new URL(base);
+    const resolved = new URL(raw, from);
+
+    if (resolved.origin !== from.origin) return DEFAULT_DESTINATION;
+
+    // Normalised, so what is handed on is already canonical.
+    return `${resolved.pathname}${resolved.search}${resolved.hash}`;
+  } catch {
+    return DEFAULT_DESTINATION;
+  }
 }
 
 export function LoginForm() {

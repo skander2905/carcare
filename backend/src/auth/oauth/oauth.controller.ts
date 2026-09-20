@@ -18,7 +18,7 @@ import { authConfig, httpConfig, oauthConfig } from '../../config/configuration.
 import { type AuthConfig, type HttpConfig, type OAuthConfig } from '../../config/config.types.js';
 import { type IssuedSession, type SessionContext } from '../auth.service.js';
 import { type AuthenticatedUser } from '../auth.types.js';
-import { refreshCookieOptions } from '../cookies.js';
+import { OAUTH_NONCE_COOKIE, oauthNonceCookieOptions, refreshCookieOptions } from '../cookies.js';
 import { CurrentUser } from '../decorators/current-user.decorator.js';
 import { Public } from '../decorators/public.decorator.js';
 import {
@@ -30,6 +30,9 @@ import { OAUTH_ERRORS, OAuthService } from './oauth.service.js';
 
 /** Starting a flow is cheap, but it writes a Redis key and hits a provider. */
 const START_LIMITS = [{ scope: 'ip' as const, limit: 20, windowSec: 300 }];
+
+/** Matches the Redis state's TTL, so neither outlives the other. */
+const NONCE_TTL_MS = 600_000;
 
 @ApiTags('auth')
 @Controller('auth')
@@ -64,7 +67,11 @@ export class OAuthController {
     @Query('returnTo') returnTo: string | undefined,
     @Res() response: Response,
   ): Promise<void> {
-    const { authorizationUrl } = await this.oauth.start(slug, returnTo);
+    const { authorizationUrl, nonce } = await this.oauth.start(slug, returnTo);
+
+    // The half of the binding the browser keeps; only its hash is stored.
+    this.setNonceCookie(response, nonce);
+
     // 302 rather than JSON: the browser is being handed to the provider, and a
     // fetch() cannot follow a cross-origin redirect into a login page.
     response.redirect(HttpStatus.FOUND, authorizationUrl);
@@ -87,8 +94,12 @@ export class OAuthController {
     @Param('provider') slug: string,
     @Query('returnTo') returnTo: string | undefined,
     @CurrentUser() current: AuthenticatedUser,
+    @Res({ passthrough: true }) response: Response,
   ): Promise<AuthorizationUrlResponse> {
-    const { authorizationUrl } = await this.oauth.start(slug, returnTo, current.id);
+    const { authorizationUrl, nonce } = await this.oauth.start(slug, returnTo, current.id);
+
+    this.setNonceCookie(response, nonce);
+
     return { authorizationUrl };
   }
 
@@ -112,6 +123,11 @@ export class OAuthController {
     @Req() request: Request,
     @Res() response: Response,
   ): Promise<void> {
+    const nonce = this.readNonceCookie(request);
+    // The flow is over either way, so the binding cookie goes now rather than
+    // lingering to be replayed against a future callback.
+    this.clearNonceCookie(response);
+
     // The user pressed "Cancel" on the provider's consent screen. Not an error
     // worth a message — put them back where they started.
     if (providerError) {
@@ -127,7 +143,7 @@ export class OAuthController {
     let result: { session?: IssuedSession; returnTo: string };
 
     try {
-      result = await this.oauth.complete(slug, code, state, sessionContext(request));
+      result = await this.oauth.complete(slug, code, state, nonce, sessionContext(request));
     } catch (error) {
       // Every failure here has to become a redirect: the user is looking at a
       // browser mid-navigation, and the error envelope would render as raw JSON.
@@ -178,6 +194,26 @@ export class OAuthController {
     const url = new URL(path, `${this.oauthOptions.webAppUrl}/`);
     if (error) url.searchParams.set('error', error);
     return url.toString();
+  }
+
+  private setNonceCookie(response: Response, nonce: string): void {
+    response.cookie(
+      OAUTH_NONCE_COOKIE,
+      nonce,
+      oauthNonceCookieOptions(this.authOptions, this.http.globalPrefix, NONCE_TTL_MS),
+    );
+  }
+
+  private readNonceCookie(request: Request): string | undefined {
+    const cookies = request.cookies as Record<string, string> | undefined;
+    return cookies?.[OAUTH_NONCE_COOKIE];
+  }
+
+  private clearNonceCookie(response: Response): void {
+    response.clearCookie(
+      OAUTH_NONCE_COOKIE,
+      oauthNonceCookieOptions(this.authOptions, this.http.globalPrefix),
+    );
   }
 
   private setRefreshCookie(response: Response, session: IssuedSession): void {

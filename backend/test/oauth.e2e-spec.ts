@@ -11,6 +11,7 @@ import {
 import { createTestApp, findCookie, httpServer, resetDatabase } from './test-app.js';
 
 const COOKIE = 'carcare_refresh_token';
+const NONCE_COOKIE = 'carcare_oauth_nonce';
 const PASSWORD = 'correct horse battery staple';
 
 /**
@@ -78,18 +79,29 @@ describe('OAuth sign-in (e2e)', () => {
 
   const server = () => httpServer(app);
 
-  /** Starts a flow and returns the `state` the API issued. */
-  async function beginFlow(returnTo?: string): Promise<string> {
+  /**
+   * Starts a flow, returning both halves of the binding: the `state` that goes
+   * to the provider and the nonce cookie the browser keeps. A real browser
+   * presents both on the callback, and the API now requires both.
+   */
+  async function beginFlow(returnTo?: string): Promise<{ state: string; nonce: string }> {
     const response = await request(server())
       .get('/api/v1/auth/oauth/google')
       .query(returnTo ? { returnTo } : {})
       .expect(302);
 
-    return new URL(response.headers.location).searchParams.get('state')!;
+    return {
+      state: new URL(response.headers.location).searchParams.get('state')!,
+      nonce: findCookie(response.headers, NONCE_COOKIE)!.value,
+    };
   }
 
-  const callback = (state: string) =>
-    request(server()).get('/api/v1/auth/oauth/google/callback').query({ code: 'stub-code', state });
+  /** The callback as the browser that started the flow would make it. */
+  const callback = ({ state, nonce }: { state: string; nonce: string }) =>
+    request(server())
+      .get('/api/v1/auth/oauth/google/callback')
+      .query({ code: 'stub-code', state })
+      .set('Cookie', `${NONCE_COOKIE}=${nonce}`);
 
   describe('GET /auth/providers', () => {
     it('lists what this deployment can actually do', async () => {
@@ -105,13 +117,27 @@ describe('OAuth sign-in (e2e)', () => {
 
   describe('starting a flow', () => {
     it('redirects to the provider with an unguessable state', async () => {
-      const state = await beginFlow();
+      const { state } = await beginFlow();
 
       expect(state).toMatch(/^[A-Za-z0-9_-]{43}$/);
     });
 
-    it('issues a different state every time', async () => {
-      expect(await beginFlow()).not.toBe(await beginFlow());
+    it('issues a different state and nonce every time', async () => {
+      const first = await beginFlow();
+      const second = await beginFlow();
+
+      expect(first.state).not.toBe(second.state);
+      expect(first.nonce).not.toBe(second.nonce);
+    });
+
+    it('binds the flow to this browser with an httpOnly cookie', async () => {
+      const response = await request(server()).get('/api/v1/auth/oauth/google').expect(302);
+      const cookie = findCookie(response.headers, NONCE_COOKIE);
+
+      // Script-readable would defeat the point: the whole purpose is that only
+      // the browser that started the flow can finish it.
+      expect(cookie?.attributes).toContain('HttpOnly');
+      expect(cookie?.attributes).toContain('Path=/api/v1/auth');
     });
   });
 
@@ -183,19 +209,56 @@ describe('OAuth sign-in (e2e)', () => {
 
     describe('state validation', () => {
       it('rejects a state that was never issued', async () => {
-        const response = await callback('forged-state').expect(302);
+        const response = await callback({ state: 'forged-state', nonce: 'whatever' }).expect(302);
 
         expect(response.headers.location).toContain('error=oauth_state');
         expect(findCookie(response.headers, COOKIE)).toBeUndefined();
       });
 
+      /**
+       * Login CSRF. The attacker starts a flow for their own Google account and
+       * sends the victim the resulting callback URL. The state is genuine and
+       * unused — only the nonce cookie says whose browser began it, and the
+       * victim's browser does not have it.
+       */
+      it('refuses a genuine callback URL replayed in another browser', async () => {
+        const flow = await beginFlow();
+
+        const response = await request(server())
+          .get('/api/v1/auth/oauth/google/callback')
+          .query({ code: 'stub-code', state: flow.state })
+          .expect(302);
+
+        expect(response.headers.location).toContain('error=oauth_state');
+        // No session is issued, so nothing lands in the attacker's account.
+        expect(findCookie(response.headers, COOKIE)).toBeUndefined();
+      });
+
+      it("refuses a callback carrying another flow's nonce", async () => {
+        const mine = await beginFlow();
+        const theirs = await beginFlow();
+
+        const response = await callback({ state: mine.state, nonce: theirs.nonce }).expect(302);
+
+        expect(response.headers.location).toContain('error=oauth_state');
+      });
+
+      it('clears the binding cookie once the flow is over', async () => {
+        const response = await callback(await beginFlow()).expect(302);
+
+        // It must not survive to be replayed against a later callback.
+        expect(findCookie(response.headers, NONCE_COOKIE)?.attributes).toMatch(
+          /Expires=Thu, 01 Jan 1970|Max-Age=0/,
+        );
+      });
+
       it('accepts a state exactly once', async () => {
-        const state = await beginFlow();
-        await callback(state).expect(302);
+        const flow = await beginFlow();
+        await callback(flow).expect(302);
 
         // Replaying the callback URL — from browser history, or a proxy log —
-        // must not mint a second session.
-        const replay = await callback(state).expect(302);
+        // must not mint a second session, even in the same browser.
+        const replay = await callback(flow).expect(302);
         expect(replay.headers.location).toContain('error=oauth_state');
       });
 

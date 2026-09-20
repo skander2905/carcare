@@ -47,19 +47,35 @@ export class RefreshTokenRepository {
   }
 
   /**
-   * Whether the session behind a family is still running — at least one token
-   * in it is neither revoked nor expired.
+   * Issues a successor **only if** the family is still running, atomically.
    *
-   * This is what separates a rotation from an ending. A token revoked a second
-   * ago could have been spent by an ordinary refresh (the family carries on) or
-   * by a logout or a replay revocation (the family is dead). The row itself
-   * cannot tell them apart; the state of its siblings can.
+   * A token revoked a second ago could have been spent by an ordinary refresh
+   * (the family carries on) or by a logout or replay revocation (the family is
+   * dead). The row itself cannot tell them apart; the state of its siblings
+   * can — so this checks and inserts together.
+   *
+   * Checking first and inserting afterwards would leave a window: a logout
+   * landing in between would be followed by an insert that resurrects the very
+   * session it just ended. The `FOR UPDATE` lock on the family's existing rows
+   * is what closes it — `revokeFamily`'s own update takes the same row locks,
+   * so the two serialise. Whichever runs second sees the other's result:
+   * revoke-then-insert finds nothing live and returns null; insert-then-revoke
+   * has its new row revoked along with the rest.
+   *
+   * Returns `null` when the family is already over.
    */
-  async hasLiveToken(familyId: string, now: Date = new Date()): Promise<boolean> {
-    const live = await this.prisma.refreshToken.count({
-      where: { familyId, revokedAt: null, expiresAt: { gt: now } },
+  createIfFamilyLive(replacement: NewRefreshToken, now: Date = new Date()): Promise<RefreshToken | null> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM refresh_tokens WHERE "familyId" = ${replacement.familyId}::uuid FOR UPDATE`;
+
+      const live = await tx.refreshToken.count({
+        where: { familyId: replacement.familyId, revokedAt: null, expiresAt: { gt: now } },
+      });
+
+      if (live === 0) return null;
+
+      return tx.refreshToken.create({ data: replacement });
     });
-    return live > 0;
   }
 
   /**

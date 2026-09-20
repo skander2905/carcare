@@ -1,14 +1,18 @@
 import {
   BadRequestException,
   ConflictException,
+  Inject,
   Injectable,
   Logger,
   UnauthorizedException,
 } from '@nestjs/common';
+import { oauthConfig } from '../../config/configuration.js';
+import { type OAuthConfig } from '../../config/config.types.js';
 import { type OAuthProvider } from '../../generated/prisma/enums.js';
 import { type OAuthAccount } from '../../prisma/model.types.js';
 import { UsersService } from '../../users/users.service.js';
 import { AuthService, type IssuedSession, type SessionContext } from '../auth.service.js';
+import { hashToken, tokenHashesMatch } from '../domain/tokens.js';
 import { createState, safeReturnPath } from './domain/pkce.js';
 import { OAuthAccountRepository } from './oauth-account.repository.js';
 import { OAuthStateService } from './oauth-state.service.js';
@@ -35,6 +39,8 @@ export const OAUTH_ERRORS = {
 export interface StartedFlow {
   authorizationUrl: string;
   state: string;
+  /** Goes into an httpOnly cookie; only its hash is stored server-side. */
+  nonce: string;
 }
 
 @Injectable()
@@ -47,6 +53,7 @@ export class OAuthService {
     private readonly accounts: OAuthAccountRepository,
     private readonly users: UsersService,
     private readonly auth: AuthService,
+    @Inject(oauthConfig.KEY) private readonly config: OAuthConfig,
   ) {}
 
   /**
@@ -60,16 +67,18 @@ export class OAuthService {
   async start(slug: string, returnTo: string | undefined, linkUserId?: string): Promise<StartedFlow> {
     const provider = this.registry.require(slug);
     const state = createState();
+    const nonce = createState();
     const { url, codeVerifier } = provider.buildAuthorizationRequest(state);
 
     await this.states.save(state, {
       provider: slug,
       codeVerifier,
-      returnTo: safeReturnPath(returnTo, DEFAULT_RETURN_PATH),
+      nonceHash: hashToken(nonce),
+      returnTo: safeReturnPath(returnTo, DEFAULT_RETURN_PATH, this.config.webAppUrl),
       ...(linkUserId ? { linkUserId } : {}),
     });
 
-    return { authorizationUrl: url, state };
+    return { authorizationUrl: url, state, nonce };
   }
 
   /**
@@ -80,6 +89,7 @@ export class OAuthService {
     slug: string,
     code: string,
     state: string,
+    presentedNonce: string | undefined,
     context: SessionContext,
   ): Promise<{ session?: IssuedSession; returnTo: string }> {
     const pending = await this.states.consume(state);
@@ -87,6 +97,17 @@ export class OAuthService {
     // No entry means the state was forged, already used, or expired. All three
     // are the same answer: this callback did not come from a request we started.
     if (pending?.provider !== slug) {
+      throw new BadRequestException(OAUTH_ERRORS.invalidState);
+    }
+
+    /*
+     * ...and this proves it came from the browser that started it.
+     *
+     * A valid state says "someone began this flow"; the nonce says "you did".
+     * Without it a captured callback URL works in any browser, which is how an
+     * attacker signs a victim into the attacker's own account.
+     */
+    if (!presentedNonce || !tokenHashesMatch(hashToken(presentedNonce), pending.nonceHash)) {
       throw new BadRequestException(OAUTH_ERRORS.invalidState);
     }
 

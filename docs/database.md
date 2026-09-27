@@ -205,7 +205,7 @@ would otherwise create a duplicate "insurance expires soon" notification every
 hour. The unique constraint makes a repeated insert a no-op, so job retries and
 overlapping workers are safe by construction rather than by careful timing.
 
-### Document — _Phase 8_
+### Document — _Phase 4b_ (expense attachments), extended in Phase 8
 
 `id`, `vehicleId`, `uploadedById`, `type`, `title`, `fileName`, `mimeType`,
 `sizeBytes`, `storageKey` (unique), `checksum?`, `status`, `issuedAt?`,

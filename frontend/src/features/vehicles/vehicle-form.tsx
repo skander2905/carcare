@@ -7,6 +7,7 @@ import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
+import { NativeSelect } from '@/components/ui/native-select';
 import { FormField } from '@/features/auth/form-field';
 import { ApiError } from '@/lib/api/client';
 import { optionalNumber } from '@/lib/forms/optional-number';
@@ -65,9 +66,6 @@ function toPayload(values: z.output<typeof vehicleSchema>) {
     ...(values.color ? { color: values.color } : {}),
   };
 }
-
-const selectClass =
-  'border-input bg-background ring-offset-background focus-visible:ring-ring flex h-9 w-full rounded-md border px-3 py-1 text-sm focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none';
 
 export function VehicleForm() {
   const router = useRouter();
@@ -138,27 +136,27 @@ export function VehicleForm() {
           <label htmlFor="fuelType" className="text-sm font-medium">
             Fuel
           </label>
-          <select id="fuelType" className={selectClass} {...register('fuelType')}>
+          <NativeSelect id="fuelType" {...register('fuelType')}>
             {FUEL_TYPES.map((value) => (
               <option key={value} value={value}>
                 {fuelLabel(value)}
               </option>
             ))}
-          </select>
+          </NativeSelect>
         </div>
 
         <div className="space-y-2">
           <label htmlFor="transmission" className="text-sm font-medium">
             Transmission
           </label>
-          <select id="transmission" className={selectClass} {...register('transmission')}>
+          <NativeSelect id="transmission" {...register('transmission')}>
             <option value="">Not sure</option>
             {TRANSMISSIONS.map((value) => (
               <option key={value} value={value}>
                 {transmissionLabel(value)}
               </option>
             ))}
-          </select>
+          </NativeSelect>
         </div>
 
         <FormField

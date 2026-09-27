@@ -1,3 +1,4 @@
+import { Paperclip } from 'lucide-react';
 import { type ReactNode } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { categoryLabel, formatExpenseDate, sourceLabel } from '@/lib/expenses/format';
@@ -26,6 +27,15 @@ export function ExpenseRow({ expense, currency, actions }: ExpenseRowProps) {
         <p className="text-muted-foreground/80 text-xs">
           {formatExpenseDate(expense.incurredAt)}
           {expense.odometerKm !== null ? ` · ${formatKm(expense.odometerKm)}` : null}
+          {expense.attachmentCount > 0 ? (
+            <span className="ml-1.5 inline-flex items-center gap-0.5 align-middle">
+              <Paperclip className="size-3" aria-hidden />
+              <span className="sr-only">
+                {expense.attachmentCount === 1 ? '1 attachment' : `${expense.attachmentCount} attachments`}
+              </span>
+              <span aria-hidden>{expense.attachmentCount}</span>
+            </span>
+          ) : null}
         </p>
       </div>
 

@@ -206,6 +206,24 @@ are unguessable but bearer-like, so they are issued only after an ownership
 check and expire in minutes. Storage keys are random, never user-supplied
 filenames — otherwise a crafted name is a path-traversal attempt.
 
+**Bucket CORS.** Because the browser talks to the store directly, the bucket
+must allow the web app's origin; the API's CORS settings never reach it.
+Compose pins MinIO's `MINIO_API_CORS_ALLOW_ORIGIN` to `WEB_APP_URL`. An
+externally managed bucket needs the equivalent rule, for example on S3:
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://app.example.com"],
+    "AllowedMethods": ["PUT", "GET"],
+    "AllowedHeaders": ["content-type"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+Without it, uploads fail in the browser while every server-side test passes.
+
 **Rejected.** `bytea` columns — bloats the database, destroys backup times, and
 streams large blobs through the query path. Proxying downloads through the
 API — burns a request worker for the duration of every download.

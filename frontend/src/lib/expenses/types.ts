@@ -30,6 +30,8 @@ export interface Expense {
   notes: string | null;
   /** Anything but MANUAL is changed through the fuel entry or service that owns it. */
   sourceType: ExpenseSource;
+  /** Receipts and invoices attached and ready to view. */
+  attachmentCount: number;
   createdById: string | null;
   createdAt: string;
   updatedAt: string;

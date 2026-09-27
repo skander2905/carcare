@@ -12,6 +12,7 @@ import { NativeSelect } from '@/components/ui/native-select';
 import { FormField } from '@/features/auth/form-field';
 import { ApiError } from '@/lib/api/client';
 import { IdempotencyKeys } from '@/lib/api/idempotency';
+import { attachmentProblem, formatFileSize } from '@/lib/documents/files';
 import { expensesApi } from '@/lib/expenses/expenses-api';
 import { AMOUNT_PATTERN, categoryLabel, incurredAtFromDate, toDateInputValue } from '@/lib/expenses/format';
 import {
@@ -22,6 +23,8 @@ import {
 } from '@/lib/expenses/types';
 import { optionalNumber } from '@/lib/forms/optional-number';
 import { vehicleKeys } from '@/lib/vehicles/vehicles-api';
+import { AttachmentPicker } from './attachment-picker';
+import { useAttachFiles } from './use-attach-files';
 
 /** Mirrors the server's DTO; the API validates all of it again. */
 const expenseSchema = z.object({
@@ -96,6 +99,11 @@ export function ExpenseForm({ vehicleId, expense, onDone }: ExpenseFormProps) {
   const queryClient = useQueryClient();
   const [serverError, setServerError] = useState<string | null>(null);
   const keys = useRef(new IdempotencyKeys());
+  // Receipts picked while adding. Kept out of the form values on purpose: they
+  // are uploaded after the expense exists, and are no part of what the
+  // Idempotency-Key identifies.
+  const [receipts, setReceipts] = useState<File[]>([]);
+  const { attach, progress, busy: uploading } = useAttachFiles(vehicleId);
 
   const {
     register,
@@ -116,13 +124,22 @@ export function ExpenseForm({ vehicleId, expense, onDone }: ExpenseFormProps) {
       const { key, payload } = keys.current.submissionFor(values, () => toCreatePayload(values));
       return expensesApi.create(vehicleId, payload, key);
     },
-    onSuccess: async () => {
+    onSuccess: async (saved) => {
       keys.current.reset();
       setServerError(null);
       toast.success(expense ? 'Expense updated' : 'Expense added');
       // The ledger, the vehicle's headline mileage and its timeline can all
       // have moved, and every one of them sits under the vehicle's keys.
       await queryClient.invalidateQueries({ queryKey: vehicleKeys.all });
+
+      /*
+       * Only now, once the expense is saved. Uploading inside the mutation
+       * would turn a failed upload into a failed expense — and someone who sees
+       * that submits again. The expense stands on its own; a receipt that does
+       * not make it is reported by name and can be attached from its row.
+       */
+      if (!expense && receipts.length > 0) await attach(saved.id, receipts);
+
       onDone();
     },
     onError: (failure: unknown) => {
@@ -217,20 +234,69 @@ export function ExpenseForm({ vehicleId, expense, onDone }: ExpenseFormProps) {
         ) : null}
       </div>
 
+      {/* Editing manages attachments from the row's Files panel instead. */}
+      {expense ? null : (
+        <div className="space-y-2">
+          <p className="text-sm font-medium">
+            Receipts <span className="text-muted-foreground font-normal">· optional</span>
+          </p>
+          {receipts.length > 0 ? (
+            <ul className="space-y-1">
+              {receipts.map((file, index) => (
+                <li key={`${file.name}-${index}`} className="flex items-center justify-between gap-3 text-sm">
+                  <span className="min-w-0 truncate">
+                    {file.name}{' '}
+                    <span className="text-muted-foreground text-xs">{formatFileSize(file.size)}</span>
+                  </span>
+                  <Button
+                    type="button"
+                    size="xs"
+                    variant="ghost"
+                    aria-label={`Don't attach ${file.name}`}
+                    onClick={() => setReceipts((current) => current.filter((_, i) => i !== index))}
+                  >
+                    Remove
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          <AttachmentPicker
+            label="Add photo or PDF"
+            disabled={save.isPending || uploading}
+            onFiles={(files) => {
+              // Refused now, next to the picker, rather than after the expense
+              // has been saved and the upload is under way.
+              const accepted = files.filter((file) => {
+                const problem = attachmentProblem(file);
+                if (problem) toast.error(problem);
+                return problem === null;
+              });
+              setReceipts((current) => [...current, ...accepted]);
+            }}
+          />
+        </div>
+      )}
+
       {serverError ? (
         <p role="alert" className="text-destructive text-sm">
           {serverError}
         </p>
       ) : null}
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {/* Disabled while pending, so a double-tap cannot send two requests. */}
-        <Button type="submit" size="sm" disabled={save.isPending}>
-          {save.isPending ? 'Saving…' : expense ? 'Save changes' : 'Add expense'}
+        <Button type="submit" size="sm" disabled={save.isPending || uploading}>
+          {uploading ? 'Uploading…' : save.isPending ? 'Saving…' : expense ? 'Save changes' : 'Add expense'}
         </Button>
-        <Button type="button" size="sm" variant="ghost" onClick={onDone}>
+        <Button type="button" size="sm" variant="ghost" disabled={uploading} onClick={onDone}>
           Cancel
         </Button>
+        {progress ? (
+          <p className="text-muted-foreground text-xs tabular-nums" aria-live="polite">
+            {progress.fileName} · {Math.round(progress.fraction * 100)}%
+          </p>
+        ) : null}
       </div>
     </form>
   );

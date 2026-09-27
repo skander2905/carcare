@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus } from 'lucide-react';
+import { Paperclip, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -22,6 +22,7 @@ import {
 } from '@/lib/expenses/types';
 import { formatMoney } from '@/lib/vehicles/format';
 import { vehicleKeys } from '@/lib/vehicles/vehicles-api';
+import { AttachmentsPanel } from './attachments-panel';
 import { ExpenseForm } from './expense-form';
 import { ExpenseRow } from './expense-row';
 
@@ -107,6 +108,7 @@ export interface ExpenseLedgerProps {
 export function ExpenseLedger({ vehicleId, currency, startAdding = false }: ExpenseLedgerProps) {
   const [adding, setAdding] = useState(startAdding);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [attachmentsId, setAttachmentsId] = useState<string | null>(null);
 
   const [category, setCategory] = useState<ExpenseCategory | ''>('');
   const [fromDay, setFromDay] = useState('');
@@ -288,27 +290,54 @@ export function ExpenseLedger({ vehicleId, currency, startAdding = false }: Expe
                       />
                     </div>
                   ) : (
-                    <ExpenseRow
-                      expense={expense}
-                      currency={currency}
-                      actions={
-                        // A fuel- or service-derived row is changed where it
-                        // came from; the API would refuse it with a 409.
-                        expense.sourceType === 'MANUAL' ? (
+                    <>
+                      <ExpenseRow
+                        expense={expense}
+                        currency={currency}
+                        actions={
                           <span className="flex gap-1">
+                            {/*
+                             * Offered on every row, derived ones included: a
+                             * receipt changes nothing about the amount, so it
+                             * belongs wherever the cost came from.
+                             */}
                             <Button
                               size="xs"
-                              variant="ghost"
-                              aria-label={`Edit ${describeExpense(expense, currency)}`}
-                              onClick={() => setEditingId(expense.id)}
+                              variant={attachmentsId === expense.id ? 'secondary' : 'ghost'}
+                              aria-expanded={attachmentsId === expense.id}
+                              aria-controls={`attachments-${expense.id}`}
+                              aria-label={`Attachments for ${describeExpense(expense, currency)}`}
+                              onClick={() =>
+                                setAttachmentsId((open) => (open === expense.id ? null : expense.id))
+                              }
                             >
-                              Edit
+                              <Paperclip className="size-3" aria-hidden />
+                              Files
                             </Button>
-                            <DeleteButton expense={expense} currency={currency} />
+                            {/* A fuel- or service-derived row is changed where it
+                                came from; the API would refuse it with a 409. */}
+                            {expense.sourceType === 'MANUAL' ? (
+                              <>
+                                <Button
+                                  size="xs"
+                                  variant="ghost"
+                                  aria-label={`Edit ${describeExpense(expense, currency)}`}
+                                  onClick={() => setEditingId(expense.id)}
+                                >
+                                  Edit
+                                </Button>
+                                <DeleteButton expense={expense} currency={currency} />
+                              </>
+                            ) : null}
                           </span>
-                        ) : null
-                      }
-                    />
+                        }
+                      />
+                      {attachmentsId === expense.id ? (
+                        <div id={`attachments-${expense.id}`} className="pb-3">
+                          <AttachmentsPanel vehicleId={vehicleId} expenseId={expense.id} />
+                        </div>
+                      ) : null}
+                    </>
                   )}
                 </li>
               ))}

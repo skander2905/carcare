@@ -8,7 +8,8 @@ a working, tested state. Status is updated as phases land.
 | 1     | **Foundation** — monorepo, NestJS + Next.js skeletons, config, logging, error handling, health probes, Prisma, Docker, CI | ✅ Done |
 | 2     | **Authentication** — register, login, refresh rotation, logout, guards, rate limiting, protected routes                   | ✅ Done |
 | 3     | **Vehicles** — CRUD, `VehicleMember` access control, odometer timeline                                                    | ✅ Done |
-| 4     | **Expenses** — the cost ledger, categories, filtering, pagination                                                         | ⬜ Next |
+| 4     | **Expenses** — the cost ledger, categories, filtering, pagination                                                         | ✅ Done |
+| 4b    | **Expense attachments** — optional receipt/invoice photo or PDF on an expense (pulled forward from Phase 8; no OCR)       | ⬜ Next |
 | 5     | **Fuel** — entries, full-to-full consumption engine, fuel analytics                                                       | ⬜      |
 | 6     | **Maintenance** — records, schedules, due/overdue engine                                                                  | ⬜      |
 | 7     | **Reminders & jobs** — BullMQ queues, worker role, notifications                                                          | ⬜      |
@@ -185,6 +186,51 @@ Added after Phase 2 landed, on the same session machinery.
 **Deferred:** the sharing UI. `VehicleMember` supports `EDITOR` and `VIEWER`
 today and the guard already honours them, but V1 creates only `OWNER` rows —
 inviting someone is an insert plus an endpoint, not a migration.
+
+## Phase 4 — delivered
+
+**Backend**
+
+- `Expense` with the specified indexes and a hand-written `CHECK (amount > 0)`.
+  No `currency` column — ADR-016 wins over the entity list, which is corrected.
+- `VehicleMembershipGuard` holds the membership check, the 404 policy and the
+  role rule once. `VehicleAccessGuard` finds the vehicle in the route;
+  `ExpenseAccessGuard` finds it through the expense, so `/expenses/:id` gets the
+  same 404-not-403 behaviour. Fuel, maintenance and trip records will each be a
+  subclass of a few lines.
+- An expense carrying mileage writes its `EXPENSE` reading in the same
+  transaction (`OdometerService.recordIn`), so a mileage that contradicts the
+  timeline refuses the expense whole. Editing withdraws the old reading before
+  validating the new one, and deleting re-derives `currentOdometerKm`.
+- Filtering by category, inclusive date range and case-insensitive search;
+  sorting from an allow-list with a stable `id` tie-break.
+- `Idempotency-Key` on create (api.md §8).
+- Fuel- and maintenance-derived rows refuse a direct edit or delete with `409`,
+  enforced now so Phases 5 and 6 inherit it.
+- 54 new unit tests and a 39-test integration suite.
+
+**Frontend**
+
+- `/vehicles/:id/expenses`: filters, debounced search, sort, pagination, inline
+  add and edit, two-step delete. A recent-expenses card on the vehicle page.
+- The form reuses its idempotency key while the payload is unchanged, so
+  re-pressing "Add" after a lost response replays instead of double-counting —
+  and takes a fresh key once anything is edited.
+- Amounts in the user's display currency, never parsed to a float.
+
+**Fixed during verification.**
+
+- **Every browser submission was blocked by CORS.** `Idempotency-Key` was not
+  in the allow-list, so the preflight succeeded and Chrome refused the request.
+  Supertest does not enforce CORS, so the integration suite could not see it.
+  The options now live in `common/http/cors.ts` with a spec.
+- **Search treated `%` and `_` as wildcards.** Prisma's `contains` does not
+  escape them, so "50%" matched "500 points". Escaped, and the test was checked
+  by breaking the escape and watching it fail.
+- **The concurrency test did not test the race.** Over a local socket the five
+  "simultaneous" submits arrived in sequence, and the test still passed with
+  the recovery branch disabled. `expenses.service.spec.ts` now forces that
+  interleaving deterministically.
 
 ## Deferred by design
 

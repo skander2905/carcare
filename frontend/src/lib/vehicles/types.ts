@@ -14,6 +14,8 @@ export interface Vehicle {
   purchaseDate: string | null;
   /** Fixed to three decimal places — TND has millimes. Never parse to a float. */
   purchasePrice: string | null;
+  /** ISO 4217. The owner's display currency; every amount on the vehicle is in it. */
+  currency: string;
   color: string | null;
   notes: string | null;
   archivedAt: string | null;

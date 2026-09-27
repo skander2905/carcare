@@ -39,3 +39,7 @@ pnpm-debug.log*
 
 # Local agent/editor tooling
 .claude/
+
+backend/.agents/
+backend/.windsurf/
+backend/skills-lock.json

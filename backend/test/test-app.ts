@@ -84,10 +84,11 @@ export function httpServer(app: INestApplication): Server {
  */
 export async function resetDatabase(app: INestApplication): Promise<void> {
   const prisma = app.get(PrismaService);
-  // `users` cascades to vehicles, memberships and readings; naming them anyway
-  // keeps the statement honest about what it destroys.
+  // `users` cascades to everything else; naming the tables anyway keeps the
+  // statement honest about what it destroys.
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "odometer_readings", "vehicle_members", "vehicles", "oauth_accounts", "refresh_tokens", "users" CASCADE',
+    'TRUNCATE TABLE "idempotency_keys", "expenses", "odometer_readings", "vehicle_members", "vehicles", ' +
+      '"oauth_accounts", "refresh_tokens", "users" CASCADE',
   );
 }
 

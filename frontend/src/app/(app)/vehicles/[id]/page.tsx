@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { RecentExpenses } from '@/features/expenses/recent-expenses';
 import { OdometerTimeline } from '@/features/vehicles/odometer-timeline';
 import { ApiError } from '@/lib/api/client';
 import { formatKm, formatMoney, vehicleSpec, vehicleTitle } from '@/lib/vehicles/format';
@@ -138,17 +139,19 @@ export default function VehicleDetailPage() {
         <CardContent>
           <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <Spec label="Mileage" value={formatKm(data.currentOdometerKm)} />
-            <Spec label="Purchase price" value={formatMoney(data.purchasePrice)} />
+            <Spec label="Purchase price" value={formatMoney(data.purchasePrice, data.currency)} />
             <Spec label="Colour" value={data.color} />
             <Spec label="VIN" value={data.vin} />
           </dl>
         </CardContent>
       </Card>
 
+      <RecentExpenses vehicleId={data.id} currency={data.currency} />
+
       <OdometerTimeline vehicleId={data.id} />
 
       <p className="text-muted-foreground text-xs">
-        Costs, fuel and maintenance for this vehicle arrive in the next phases.
+        Fuel consumption and maintenance schedules for this vehicle arrive in the next phases.
       </p>
     </div>
   );

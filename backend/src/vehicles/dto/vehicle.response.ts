@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { toDecimalString, toMoneyString } from '../../common/http/decimal.js';
-import { type Vehicle } from '../../prisma/model.types.js';
+import { type VehicleWithCurrency } from '../vehicles.repository.js';
 
 export class VehicleResponse {
   @ApiProperty({ format: 'uuid' })
@@ -39,6 +39,13 @@ export class VehicleResponse {
   @ApiPropertyOptional({ example: '38500.000', nullable: true })
   purchasePrice: string | null;
 
+  @ApiProperty({
+    example: 'TND',
+    description:
+      "ISO 4217. The owner's display currency — every amount on this vehicle, its expenses included, is in it.",
+  })
+  currency: string;
+
   @ApiPropertyOptional({ example: 'Deep Black Pearl', nullable: true })
   color: string | null;
 
@@ -60,7 +67,7 @@ export class VehicleResponse {
  * a float, and `toString()` alone would drop the trailing millimes — so the
  * width varies by value. See common/http/decimal.ts.
  */
-export function toVehicleResponse(vehicle: Vehicle): VehicleResponse {
+export function toVehicleResponse(vehicle: VehicleWithCurrency): VehicleResponse {
   return {
     id: vehicle.id,
     make: vehicle.make,
@@ -74,6 +81,7 @@ export function toVehicleResponse(vehicle: Vehicle): VehicleResponse {
     currentOdometerKm: vehicle.currentOdometerKm,
     purchaseDate: vehicle.purchaseDate?.toISOString() ?? null,
     purchasePrice: toMoneyString(vehicle.purchasePrice),
+    currency: vehicle.owner.currency,
     color: vehicle.color,
     notes: vehicle.notes,
     archivedAt: vehicle.archivedAt?.toISOString() ?? null,

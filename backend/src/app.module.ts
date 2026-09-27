@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { APP_FILTER } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
 import { AuthModule } from './auth/auth.module.js';
+import { ExpensesModule } from './expenses/expenses.module.js';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 import { buildLoggerOptions } from './common/logging/logger.options.js';
 import { RateLimitModule } from './common/rate-limit/rate-limit.module.js';
@@ -49,6 +50,7 @@ import { VehiclesModule } from './vehicles/vehicles.module.js';
     UsersModule,
     VehiclesModule,
     OdometerModule,
+    ExpensesModule,
   ],
   providers: [
     // Registered through DI rather than `app.useGlobalFilters(new ...)` so the

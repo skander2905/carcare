@@ -139,9 +139,13 @@ Index: `(vehicleId, recordedAt)`, `(vehicleId, odometerKm)`.
 
 ### Expense — _Phase 4_
 
-`id`, `vehicleId`, `createdById`, `category`, `amount`, `currency`,
-`incurredAt`, `odometerKm?`, `description?`, `vendor?`, `notes?`, `sourceType`,
-timestamps.
+`id`, `vehicleId`, `createdById?`, `category`, `amount`, `incurredAt`,
+`odometerKm?`, `description?`, `vendor?`, `notes?`, `sourceType`, timestamps.
+
+No `currency` column: amounts are in the owner's display currency (ADR-016).
+`createdById` is nullable with `ON DELETE SET NULL` — the expense belongs to the
+vehicle, and a shared editor deleting their account must not take part of the
+owner's cost history with them.
 
 Indexes: `(vehicleId, incurredAt DESC)` for the paginated list,
 `(vehicleId, category, incurredAt)` for the category breakdown.

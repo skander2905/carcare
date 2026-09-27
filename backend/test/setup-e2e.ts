@@ -54,6 +54,17 @@ pin('REFRESH_COOKIE_SECURE', 'false');
  */
 pin('AUTH_RATE_LIMIT_ENABLED', 'false');
 
+/*
+ * No object storage unless a suite provides one.
+ *
+ * A developer running MinIO has S3 credentials in .env, and without this the
+ * "storage not configured" suite passes in CI and fails on their machine.
+ * Suites that need storage substitute an in-memory one through createTestApp
+ * rather than depending on a bucket. Empty counts as unset.
+ */
+pin('S3_ACCESS_KEY_ID', '');
+pin('S3_SECRET_ACCESS_KEY', '');
+
 if (!process.env.DATABASE_URL) {
   throw new Error(
     'DATABASE_URL is not set. Integration tests need a real database — run `docker compose up -d db redis` first.',

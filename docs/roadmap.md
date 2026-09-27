@@ -9,11 +9,11 @@ a working, tested state. Status is updated as phases land.
 | 2     | **Authentication** — register, login, refresh rotation, logout, guards, rate limiting, protected routes                   | ✅ Done |
 | 3     | **Vehicles** — CRUD, `VehicleMember` access control, odometer timeline                                                    | ✅ Done |
 | 4     | **Expenses** — the cost ledger, categories, filtering, pagination                                                         | ✅ Done |
-| 4b    | **Expense attachments** — optional receipt/invoice photo or PDF on an expense (pulled forward from Phase 8; no OCR)       | ⬜ Next |
-| 5     | **Fuel** — entries, full-to-full consumption engine, fuel analytics                                                       | ⬜      |
+| 4b    | **Expense attachments** — optional receipt/invoice photo or PDF on an expense (pulled forward from Phase 8; no OCR)       | ✅ Done |
+| 5     | **Fuel** — entries, full-to-full consumption engine, fuel analytics                                                       | ⬜ Next |
 | 6     | **Maintenance** — records, schedules, due/overdue engine                                                                  | ⬜      |
 | 7     | **Reminders & jobs** — BullMQ queues, worker role, notifications                                                          | ⬜      |
-| 8     | **Documents** — presigned S3 upload/download, expiry tracking                                                             | ⬜      |
+| 8     | **Documents** — expiry tracking, vehicle-level documents (upload/download landed in 4b)                                   | ⬜      |
 | 9     | **Analytics** — dashboard, charts, cost/km, total cost of ownership                                                       | ⬜      |
 | 10    | **Trips** — trip log and estimated trip cost                                                                              | ⬜      |
 | 11    | **Testing** — integration coverage, Playwright E2E journeys                                                               | ⬜      |
@@ -232,8 +232,51 @@ inviting someone is an insert plus an endpoint, not a migration.
   the recovery branch disabled. `expenses.service.spec.ts` now forces that
   interleaving deterministically.
 
+## Phase 4b — receipt attachments
+
+Pulled forward from Phase 8 at Skander's request: an optional photo or PDF of
+the receipt or invoice on any expense. Attach only; nothing reads the files.
+
+**Backend**
+
+- `Document` as specified in database.md, minus `maintenanceRecordId` until
+  Phase 6 creates the table it points at.
+- Presigned uploads straight to storage (ADR-009). The URL signs the exact
+  content type and size, so the store refuses any other file — checked against
+  MinIO, where a wrong size or type is a 403.
+- Confirmation asks the store what arrived before a document counts: missing
+  stays pending, a mismatch is discarded, a match is ready. Safe to repeat.
+- Storage keys are random, never derived from the uploader's file name, and
+  downloads carry a Content-Disposition that name cannot inject into.
+- Deleting a document, its expense or its vehicle deletes the stored files,
+  after the commit so a failed commit can never lose data.
+- Storage is optional configuration: without credentials the API boots and
+  the endpoints answer 503, so CI and a fresh clone need no bucket.
+
+**Frontend**
+
+- An optional Receipts picker when adding an expense, uploaded once the
+  expense is saved; a Files panel on every row to view, remove or add more.
+- `accept="image/*"` lets a phone offer its camera, without `capture`, so an
+  emailed PDF can still be picked. HEIC is accepted.
+
+**Fixed during verification.**
+
+- **MinIO's images are gone from Docker Hub.** `minio/minio` and `minio/mc`
+  now 404, which broke `docker compose up` for the whole stack. Compose uses
+  Chainguard's rebuild of the same server. It has no shell and no `mc`, so the
+  healthcheck is gone and the bucket is created by one retried `mc mb`.
+- **Every upload would have failed on AWS S3.** The SDK adds a CRC32 checksum
+  to presigned PUTs by default, computed at signing time over a body that does
+  not exist yet. MinIO ignores it, so the upload succeeded — the URL gave it
+  away. AWS verifies it. The signing client now adds checksums only when an
+  operation requires them, and a unit test fails if one reappears.
+
+**Not built:** a sweep for uploads never confirmed (Phase 7's job queue), and
+thumbnails.
+
 ## Deferred by design
 
-Not built, and why: multi-currency conversion (needs historical rates and a
-product decision), depreciation modelling, OCR, OBD-II, GPS tracking, push
+Not built, and why: reading receipts to pre-fill an expense (OCR — needs a vision service; 4b attaches files only), multi-currency conversion (needs historical rates and a
+product decision), depreciation modelling, OBD-II, GPS tracking, push
 notifications, vehicle sharing UI (the data model already supports it).

@@ -151,7 +151,7 @@ POST   /vehicles/:id/reminders
 PATCH  /reminders/:id
 DELETE /reminders/:id
 
-GET    /vehicles/:id/documents         ?type=&expiringBefore=
+GET    /vehicles/:id/documents         ?expenseId=&type=     (expiringBefore= in Phase 8)
 POST   /vehicles/:id/documents/upload-url     -> presigned PUT + document id
 POST   /documents/:id/confirm                 -> PENDING_UPLOAD -> READY
 GET    /documents/:id/download-url             -> presigned GET, short-lived

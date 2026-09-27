@@ -52,6 +52,11 @@ services:
     environment:
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-carcare}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-carcare-dev-secret}
+      # Browsers upload straight here from the web app, so the web origin must
+      # pass CORS. MinIO applies CORS server-wide rather than per bucket, and
+      # defaults to allowing every origin; this pins it to the one that should
+      # be uploading. The API's own CORS settings do not reach the store.
+      MINIO_API_CORS_ALLOW_ORIGIN: ${WEB_APP_URL:-http://localhost:3000}
     ports:
       - '${MINIO_PORT:-9000}:9000'
       - '${MINIO_CONSOLE_PORT:-9001}:9001'

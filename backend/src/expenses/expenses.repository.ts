@@ -1,10 +1,21 @@
 import { Injectable } from '@nestjs/common';
 import { type Prisma } from '../generated/prisma/client.js';
-import { type ExpenseCategory } from '../generated/prisma/enums.js';
+import { DocumentStatus, type ExpenseCategory } from '../generated/prisma/enums.js';
 import { type PrismaLike } from '../odometer/odometer.repository.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { type Expense } from '../prisma/model.types.js';
 import { type ExpenseSort } from './dto/expense.dto.js';
+
+/**
+ * Every expense read carries how many ready attachments it has, so the ledger
+ * can show a paperclip without a request per row. Pending and failed uploads
+ * are not attachments yet, and are not counted.
+ */
+const WITH_ATTACHMENT_COUNT = {
+  _count: { select: { documents: { where: { status: DocumentStatus.READY } } } },
+} as const;
+
+export type ExpenseWithAttachments = Expense & { _count: { documents: number } };
 
 export type NewExpense = Omit<Prisma.ExpenseUncheckedCreateInput, 'id' | 'createdAt' | 'updatedAt'>;
 
@@ -46,8 +57,8 @@ export class ExpensesRepository {
    * the expense to belong to it means an id can only ever resolve inside a
    * vehicle that authorisation checked.
    */
-  findInVehicle(client: PrismaLike, id: string, vehicleId: string): Promise<Expense | null> {
-    return client.expense.findFirst({ where: { id, vehicleId } });
+  findInVehicle(client: PrismaLike, id: string, vehicleId: string): Promise<ExpenseWithAttachments | null> {
+    return client.expense.findFirst({ where: { id, vehicleId }, include: WITH_ATTACHMENT_COUNT });
   }
 
   /**
@@ -55,29 +66,40 @@ export class ExpensesRepository {
    * same expense apply one after the other rather than both computing their
    * odometer changes from the same stale row.
    */
-  async lock(tx: Prisma.TransactionClient, id: string, vehicleId: string): Promise<Expense | null> {
+  async lock(
+    tx: Prisma.TransactionClient,
+    id: string,
+    vehicleId: string,
+  ): Promise<ExpenseWithAttachments | null> {
     await tx.$queryRaw`SELECT id FROM expenses WHERE id = ${id}::uuid AND "vehicleId" = ${vehicleId}::uuid FOR UPDATE`;
     return this.findInVehicle(tx, id, vehicleId);
   }
 
-  create(client: PrismaLike, data: NewExpense): Promise<Expense> {
-    return client.expense.create({ data });
+  create(client: PrismaLike, data: NewExpense): Promise<ExpenseWithAttachments> {
+    return client.expense.create({ data, include: WITH_ATTACHMENT_COUNT });
   }
 
-  update(client: PrismaLike, id: string, data: ExpenseChanges): Promise<Expense> {
-    return client.expense.update({ where: { id }, data });
+  update(client: PrismaLike, id: string, data: ExpenseChanges): Promise<ExpenseWithAttachments> {
+    return client.expense.update({ where: { id }, data, include: WITH_ATTACHMENT_COUNT });
+  }
+
+  /** Where an expense's files are stored, read before the rows cascade away. */
+  async documentKeys(client: PrismaLike, expenseId: string): Promise<string[]> {
+    const rows = await client.document.findMany({ where: { expenseId }, select: { storageKey: true } });
+    return rows.map((row) => row.storageKey);
   }
 
   async delete(client: PrismaLike, id: string): Promise<void> {
     await client.expense.delete({ where: { id } });
   }
 
-  list(vehicleId: string, request: ExpensePageRequest): Promise<Expense[]> {
+  list(vehicleId: string, request: ExpensePageRequest): Promise<ExpenseWithAttachments[]> {
     return this.prisma.expense.findMany({
       where: this.where(vehicleId, request),
       orderBy: this.orderBy(request.sort),
       skip: request.skip,
       take: request.take,
+      include: WITH_ATTACHMENT_COUNT,
     });
   }
 

@@ -1,6 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '../generated/prisma/client.js';
 import { OdometerService } from '../odometer/odometer.service.js';
+import { ObjectStorage } from '../storage/object-storage.js';
+import { purgeObjects } from '../storage/purge.js';
 import { type CreateVehicleDto, type UpdateVehicleDto } from './dto/vehicle.dto.js';
 import { type VehicleWithCurrency, VehiclesRepository } from './vehicles.repository.js';
 
@@ -8,9 +10,12 @@ const UNIQUE_VIOLATION = 'P2002';
 
 @Injectable()
 export class VehiclesService {
+  private readonly logger = new Logger(VehiclesService.name);
+
   constructor(
     private readonly vehicles: VehiclesRepository,
     private readonly odometer: OdometerService,
+    private readonly storage: ObjectStorage,
   ) {}
 
   async create(ownerId: string, dto: CreateVehicleDto): Promise<VehicleWithCurrency> {
@@ -88,6 +93,12 @@ export class VehiclesService {
    * for a vehicle that was entered by mistake.
    */
   async remove(vehicleId: string): Promise<void> {
+    // Collected first: once the vehicle is gone, its document rows are too,
+    // and nothing would say where the files are. An upload landing in between
+    // leaves an orphan for the Phase 7 sweep, not a dangling row.
+    const keys = await this.vehicles.documentKeys(vehicleId);
+
     await this.vehicles.delete(vehicleId);
+    await purgeObjects(this.storage, keys, this.logger);
   }
 }

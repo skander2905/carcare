@@ -7,6 +7,7 @@ import type {
   loggingConfig,
   oauthConfig,
   redisConfig,
+  storageConfig,
   swaggerConfig,
 } from './configuration.js';
 
@@ -24,3 +25,4 @@ export type AuthConfig = ConfigType<typeof authConfig>;
 export type OAuthConfig = ConfigType<typeof oauthConfig>;
 export type LoggingConfig = ConfigType<typeof loggingConfig>;
 export type SwaggerConfig = ConfigType<typeof swaggerConfig>;
+export type StorageConfig = ConfigType<typeof storageConfig>;

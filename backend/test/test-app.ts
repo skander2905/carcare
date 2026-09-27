@@ -87,7 +87,7 @@ export async function resetDatabase(app: INestApplication): Promise<void> {
   // `users` cascades to everything else; naming the tables anyway keeps the
   // statement honest about what it destroys.
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "idempotency_keys", "expenses", "odometer_readings", "vehicle_members", "vehicles", ' +
+    'TRUNCATE TABLE "documents", "idempotency_keys", "expenses", "odometer_readings", "vehicle_members", "vehicles", ' +
       '"oauth_accounts", "refresh_tokens", "users" CASCADE',
   );
 }

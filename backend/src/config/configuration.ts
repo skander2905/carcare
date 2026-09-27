@@ -80,6 +80,24 @@ export const oauthConfig = registerAs('oauth', () => {
   };
 });
 
+export const storageConfig = registerAs('storage', () => {
+  const env = loadEnv();
+  const credentials =
+    env.S3_ACCESS_KEY_ID && env.S3_SECRET_ACCESS_KEY
+      ? { accessKeyId: env.S3_ACCESS_KEY_ID, secretAccessKey: env.S3_SECRET_ACCESS_KEY }
+      : undefined;
+
+  return {
+    enabled: credentials !== undefined,
+    bucket: env.S3_BUCKET,
+    region: env.S3_REGION,
+    endpoint: env.S3_ENDPOINT,
+    publicEndpoint: env.S3_PUBLIC_ENDPOINT ?? env.S3_ENDPOINT,
+    forcePathStyle: env.S3_FORCE_PATH_STYLE,
+    credentials,
+  };
+});
+
 export const loggingConfig = registerAs('logging', () => {
   const env = loadEnv();
   return {
@@ -104,6 +122,7 @@ export const configNamespaces = [
   redisConfig,
   authConfig,
   oauthConfig,
+  storageConfig,
   loggingConfig,
   swaggerConfig,
 ];

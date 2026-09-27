@@ -129,6 +129,16 @@ services:
       # Optional: unset means password-only sign-in.
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      # Receipts and invoices (ADR-009). The API reaches MinIO by its service
+      # name; presigned URLs go to the browser, so they are signed for the
+      # host port instead.
+      S3_ENDPOINT: http://minio:9000
+      S3_PUBLIC_ENDPOINT: ${S3_PUBLIC_ENDPOINT:-http://localhost:9000}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_BUCKET: ${S3_BUCKET:-carcare-documents}
+      S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-carcare}
+      S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-carcare-dev-secret}
+      S3_FORCE_PATH_STYLE: 'true'
     ports:
       - '${BACKEND_PORT:-3001}:3001'
 

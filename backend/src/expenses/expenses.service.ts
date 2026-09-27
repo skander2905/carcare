@@ -1,27 +1,38 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { type Prisma } from '../generated/prisma/client.js';
 import { ExpenseSource, OdometerSource } from '../generated/prisma/enums.js';
 import { IdempotencyService, type IdempotentRequest } from '../common/idempotency/idempotency.service.js';
 import { OdometerService } from '../odometer/odometer.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { type Expense } from '../prisma/model.types.js';
+import { ObjectStorage } from '../storage/object-storage.js';
+import { purgeObjects } from '../storage/purge.js';
 import {
   type CreateExpenseDto,
   type ListExpensesQueryDto,
   type UpdateExpenseDto,
 } from './dto/expense.dto.js';
-import { type ExpenseChanges, ExpensesRepository } from './expenses.repository.js';
+import {
+  type ExpenseChanges,
+  type ExpenseWithAttachments,
+  ExpensesRepository,
+} from './expenses.repository.js';
 
 export const CREATE_EXPENSE_SCOPE = 'expense.create';
 
 export interface CreatedExpense {
-  expense: Expense;
+  expense: ExpenseWithAttachments;
   /** True when an `Idempotency-Key` matched an earlier request. */
   replayed: boolean;
 }
 
 export interface ExpensePage {
-  expenses: Expense[];
+  expenses: ExpenseWithAttachments[];
   total: number;
 }
 
@@ -35,11 +46,14 @@ export interface ExpensePage {
  */
 @Injectable()
 export class ExpensesService {
+  private readonly logger = new Logger(ExpensesService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly expenses: ExpensesRepository,
     private readonly odometer: OdometerService,
     private readonly idempotency: IdempotencyService,
+    private readonly storage: ObjectStorage,
   ) {}
 
   async create(
@@ -104,7 +118,7 @@ export class ExpensesService {
     }
   }
 
-  async findOne(vehicleId: string, id: string): Promise<Expense> {
+  async findOne(vehicleId: string, id: string): Promise<ExpenseWithAttachments> {
     const expense = await this.expenses.findInVehicle(this.prisma, id, vehicleId);
     // Reachable only if it was deleted between the guard and this read.
     if (!expense) throw new NotFoundException('Expense not found');
@@ -112,7 +126,7 @@ export class ExpensesService {
     return expense;
   }
 
-  async update(vehicleId: string, id: string, dto: UpdateExpenseDto): Promise<Expense> {
+  async update(vehicleId: string, id: string, dto: UpdateExpenseDto): Promise<ExpenseWithAttachments> {
     return this.prisma.$transaction(async (tx) => {
       const existing = await this.lockEditable(tx, vehicleId, id);
 
@@ -155,8 +169,12 @@ export class ExpensesService {
   }
 
   async remove(vehicleId: string, id: string): Promise<void> {
-    await this.prisma.$transaction(async (tx) => {
+    const attachmentKeys = await this.prisma.$transaction(async (tx) => {
       const existing = await this.lockEditable(tx, vehicleId, id);
+      // Read inside the transaction, before the document rows cascade away
+      // with the expense — afterwards there is nothing left to say where the
+      // files are.
+      const keys = await this.expenses.documentKeys(tx, id);
 
       // The reading goes with the expense, or the timeline keeps a point whose
       // source no longer exists — and the vehicle's headline mileage may rest
@@ -166,7 +184,11 @@ export class ExpensesService {
       }
 
       await this.expenses.delete(tx, id);
+      return keys;
     });
+
+    // After the commit, never inside it: see purgeObjects.
+    await purgeObjects(this.storage, attachmentKeys, this.logger);
   }
 
   async list(vehicleId: string, query: ListExpensesQueryDto): Promise<ExpensePage> {
@@ -200,7 +222,11 @@ export class ExpensesService {
    * those rows until Phases 5 and 6; the rule is enforced now so they do not
    * have to remember it.
    */
-  private async lockEditable(tx: Prisma.TransactionClient, vehicleId: string, id: string): Promise<Expense> {
+  private async lockEditable(
+    tx: Prisma.TransactionClient,
+    vehicleId: string,
+    id: string,
+  ): Promise<ExpenseWithAttachments> {
     const expense = await this.expenses.lock(tx, id, vehicleId);
     if (!expense) throw new NotFoundException('Expense not found');
 
@@ -215,7 +241,7 @@ export class ExpensesService {
   private async recordReading(
     tx: Prisma.TransactionClient,
     vehicleId: string,
-    expense: Pick<Expense, 'id' | 'incurredAt'> & { odometerKm: number },
+    expense: Pick<ExpenseWithAttachments, 'id' | 'incurredAt'> & { odometerKm: number },
   ): Promise<void> {
     await this.odometer.recordIn(tx, vehicleId, {
       odometerKm: expense.odometerKm,

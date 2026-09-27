@@ -75,6 +75,12 @@ export class VehiclesRepository {
     return this.prisma.vehicle.update({ where: { id: vehicleId }, data, include: WITH_OWNER_CURRENCY });
   }
 
+  /** Where the vehicle's files are stored, read before the rows cascade away. */
+  async documentKeys(vehicleId: string): Promise<string[]> {
+    const rows = await this.prisma.document.findMany({ where: { vehicleId }, select: { storageKey: true } });
+    return rows.map((row) => row.storageKey);
+  }
+
   /** Cascades to memberships, odometer readings and every cost record. */
   async delete(vehicleId: string): Promise<void> {
     await this.prisma.vehicle.delete({ where: { id: vehicleId } });

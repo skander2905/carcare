@@ -134,6 +134,25 @@ export const envSchema = z.object({
   GOOGLE_CLIENT_ID: optionalNonEmpty(),
   GOOGLE_CLIENT_SECRET: optionalNonEmpty(),
 
+  /**
+   * Object storage for documents and receipts (ADR-009). Optional, like Google
+   * sign-in: without credentials the API boots and the attachment endpoints
+   * answer 503, so a fresh clone and CI need no bucket.
+   *
+   * `S3_ENDPOINT` is where the API reaches the store — `http://minio:9000`
+   * inside Compose. Presigned URLs are opened by the *browser*, which cannot
+   * resolve `minio`, so they are signed against `S3_PUBLIC_ENDPOINT` when set.
+   * Both unset means AWS itself.
+   */
+  S3_ENDPOINT: optionalNonEmpty(),
+  S3_PUBLIC_ENDPOINT: optionalNonEmpty(),
+  S3_REGION: z.string().default('us-east-1'),
+  S3_BUCKET: z.string().default('carcare-documents'),
+  S3_ACCESS_KEY_ID: optionalNonEmpty(),
+  S3_SECRET_ACCESS_KEY: optionalNonEmpty(),
+  /** MinIO serves buckets by path (`host/bucket/key`), not as subdomains. */
+  S3_FORCE_PATH_STYLE: booleanFromEnv(false),
+
   /** Escape hatch for tests and local debugging; never turn this off in production. */
   AUTH_RATE_LIMIT_ENABLED: booleanFromEnv(true),
 

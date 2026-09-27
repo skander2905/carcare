@@ -15,4 +15,5 @@ export type {
   OdometerReadingModel as OdometerReading,
   ExpenseModel as Expense,
   IdempotencyKeyModel as IdempotencyKey,
+  DocumentModel as Document,
 } from '../generated/prisma/models.js';

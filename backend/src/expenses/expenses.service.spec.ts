@@ -4,6 +4,7 @@ import { Prisma } from '../generated/prisma/client.js';
 import { ExpenseSource } from '../generated/prisma/enums.js';
 import { IdempotencyService } from '../common/idempotency/idempotency.service.js';
 import { type OdometerService } from '../odometer/odometer.service.js';
+import { type ObjectStorage } from '../storage/object-storage.js';
 import { type PrismaService } from '../prisma/prisma.service.js';
 import { type Expense } from '../prisma/model.types.js';
 import { type CreateExpenseDto } from './dto/expense.dto.js';
@@ -47,6 +48,7 @@ describe('ExpensesService.create under a concurrent retry', () => {
       expenses as unknown as ExpensesRepository,
       {} as OdometerService,
       idempotency,
+      { enabled: false } as ObjectStorage,
     );
   });
 

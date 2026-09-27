@@ -46,31 +46,36 @@ export class DocumentsService {
   ): Promise<{ document: Document; upload: PresignedUpload }> {
     this.requireStorage();
 
-    if (dto.expenseId) {
-      // 404 like everything else here: an expense on another vehicle is, to
-      // this request, an expense that does not exist.
-      const expense = await this.documents.expenseInVehicle(dto.expenseId, vehicleId);
-      if (!expense) throw new NotFoundException('Expense not found');
+    const outcome = await this.documents.createWithinLimit(
+      {
+        vehicleId,
+        uploadedById: userId,
+        expenseId: dto.expenseId ?? null,
+        type: dto.type ?? DocumentType.RECEIPT,
+        title: dto.title ?? defaultTitle(dto.fileName),
+        fileName: dto.fileName,
+        mimeType: dto.mimeType,
+        sizeBytes: dto.sizeBytes,
+        // Generated, never derived from the file name: a name like
+        // "../../other-vehicle/x" must not become a path in the bucket. Random,
+        // so knowing a document's id tells you nothing about where it is stored.
+        storageKey: `vehicles/${vehicleId}/documents/${randomUUID()}`,
+      },
+      MAX_ATTACHMENTS_PER_EXPENSE,
+    );
 
-      if ((await this.documents.countLiveForExpense(dto.expenseId)) >= MAX_ATTACHMENTS_PER_EXPENSE) {
+    switch (outcome.kind) {
+      case 'expense-missing':
+        // 404 like everything else here: an expense on another vehicle is, to
+        // this request, an expense that does not exist.
+        throw new NotFoundException('Expense not found');
+      case 'vehicle-missing':
+        throw new NotFoundException('Vehicle not found');
+      case 'limit-reached':
         throw new ConflictException(`An expense can have at most ${MAX_ATTACHMENTS_PER_EXPENSE} attachments`);
-      }
     }
 
-    const document = await this.documents.create({
-      vehicleId,
-      uploadedById: userId,
-      expenseId: dto.expenseId ?? null,
-      type: dto.type ?? DocumentType.RECEIPT,
-      title: dto.title ?? dto.fileName,
-      fileName: dto.fileName,
-      mimeType: dto.mimeType,
-      sizeBytes: dto.sizeBytes,
-      // Generated, never derived from the file name: a name like
-      // "../../other-vehicle/x" must not become a path in the bucket. Random,
-      // so knowing a document's id tells you nothing about where it is stored.
-      storageKey: `vehicles/${vehicleId}/documents/${randomUUID()}`,
-    });
+    const { document } = outcome;
 
     const upload = await this.storage.presignUpload({
       key: document.storageKey,
@@ -110,16 +115,33 @@ export class DocumentsService {
       stored.sizeBytes === document.sizeBytes &&
       (stored.contentType === undefined || stored.contentType === document.mimeType);
 
+    /*
+     * Two confirms can race — a double tap, a retry — and each may have seen
+     * different bytes, because the upload URL stays valid and the file can be
+     * overwritten between their HEADs. Only the transition that actually
+     * happened is acted on, and the loser defers to what the winner decided:
+     * otherwise one confirm could mark a document READY while the other
+     * deletes its file.
+     */
     if (!matches) {
       // The signature should make this unreachable. If it is reached, the
       // bytes are not the ones that were approved, so they are not kept.
-      await this.documents.settle(id, DocumentStatus.FAILED);
-      await purgeObjects(this.storage, [document.storageKey], this.logger);
-      throw new UnprocessableEntityException('The uploaded file does not match what was declared');
+      if (await this.documents.settle(id, DocumentStatus.FAILED)) {
+        await purgeObjects(this.storage, [document.storageKey], this.logger);
+        throw new UnprocessableEntityException('The uploaded file does not match what was declared');
+      }
+      return this.settledElsewhere(vehicleId, id);
     }
 
-    await this.documents.settle(id, DocumentStatus.READY);
-    return this.find(vehicleId, id);
+    if (await this.documents.settle(id, DocumentStatus.READY)) return this.find(vehicleId, id);
+    return this.settledElsewhere(vehicleId, id);
+  }
+
+  /** What a concurrent confirm decided, reported as if this one had decided it. */
+  private async settledElsewhere(vehicleId: string, id: string): Promise<Document> {
+    const current = await this.find(vehicleId, id);
+    if (current.status === DocumentStatus.READY) return current;
+    throw new ConflictException('This upload failed; attach the file again');
   }
 
   async downloadUrl(vehicleId: string, id: string): Promise<{ url: string; expiresAt: Date }> {
@@ -159,4 +181,19 @@ export class DocumentsService {
       throw new ServiceUnavailableException('File storage is not configured on this server');
     }
   }
+}
+
+/** `Document.title` is VARCHAR(200); file names may run to 255. */
+const TITLE_MAX_LENGTH = 200;
+
+/**
+ * The file name, cut to fit `Document.title`.
+ *
+ * Without the cut, a long file name and no title reached the database and
+ * failed as a 500. It cuts by code point, not UTF-16 unit, so an emoji or an
+ * accented letter at the boundary is dropped whole rather than split into an
+ * invalid half — Postgres counts VARCHAR length in characters too.
+ */
+export function defaultTitle(fileName: string): string {
+  return Array.from(fileName).slice(0, TITLE_MAX_LENGTH).join('');
 }

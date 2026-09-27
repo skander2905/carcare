@@ -75,14 +75,25 @@ export class VehiclesRepository {
     return this.prisma.vehicle.update({ where: { id: vehicleId }, data, include: WITH_OWNER_CURRENCY });
   }
 
-  /** Where the vehicle's files are stored, read before the rows cascade away. */
-  async documentKeys(vehicleId: string): Promise<string[]> {
-    const rows = await this.prisma.document.findMany({ where: { vehicleId }, select: { storageKey: true } });
-    return rows.map((row) => row.storageKey);
-  }
+  /**
+   * Deletes the vehicle and returns where its files were stored.
+   *
+   * Cascades to memberships, odometer readings, every cost record and every
+   * document row. The keys are collected in the same transaction, after
+   * locking the vehicle row: inserting a document takes a key-share lock on
+   * the vehicle it references, so no document can be created between the
+   * list being taken and the delete — it waits, then fails its foreign key.
+   * Collected outside the transaction, a document created in that gap would
+   * cascade away with its key never listed, and its file never purged.
+   */
+  deleteReturningDocumentKeys(vehicleId: string): Promise<string[]> {
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT id FROM vehicles WHERE id = ${vehicleId}::uuid FOR UPDATE`;
 
-  /** Cascades to memberships, odometer readings and every cost record. */
-  async delete(vehicleId: string): Promise<void> {
-    await this.prisma.vehicle.delete({ where: { id: vehicleId } });
+      const rows = await tx.document.findMany({ where: { vehicleId }, select: { storageKey: true } });
+      await tx.vehicle.delete({ where: { id: vehicleId } });
+
+      return rows.map((row) => row.storageKey);
+    });
   }
 }

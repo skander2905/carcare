@@ -33,7 +33,7 @@ const expenseSchema = z.object({
   odometerKm: optionalNumber((n) => n.int('Whole kilometres').min(0).max(5_000_000)),
   vendor: z.string().trim().max(120),
   description: z.string().trim().max(200),
-  notes: z.string().trim().max(2000),
+  notes: z.string().trim().max(2000, 'Keep notes under 2,000 characters'),
 });
 
 type ExpenseValues = z.input<typeof expenseSchema>;
@@ -110,8 +110,11 @@ export function ExpenseForm({ vehicleId, expense, onDone }: ExpenseFormProps) {
     mutationFn: (values: ParsedExpense) => {
       if (expense) return expensesApi.update(expense.id, toUpdatePayload(values, expense));
 
-      const payload = toCreatePayload(values);
-      return expensesApi.create(vehicleId, payload, keys.current.keyFor(payload));
+      // Keyed by what was entered, with the payload frozen on the first
+      // attempt: a retry of an expense dated today must resend the original
+      // timestamp, not a new one that would make it a different request.
+      const { key, payload } = keys.current.submissionFor(values, () => toCreatePayload(values));
+      return expensesApi.create(vehicleId, payload, key);
     },
     onSuccess: async () => {
       keys.current.reset();
@@ -202,9 +205,16 @@ export function ExpenseForm({ vehicleId, expense, onDone }: ExpenseFormProps) {
         <textarea
           id={id('notes')}
           rows={2}
+          aria-invalid={Boolean(errors.notes)}
+          aria-describedby={errors.notes ? id('notes-error') : undefined}
           className="border-input bg-background ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring flex w-full rounded-md border px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2"
           {...register('notes')}
         />
+        {errors.notes ? (
+          <p id={id('notes-error')} role="alert" className="text-destructive text-sm">
+            {errors.notes.message}
+          </p>
+        ) : null}
       </div>
 
       {serverError ? (

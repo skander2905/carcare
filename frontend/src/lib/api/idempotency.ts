@@ -1,3 +1,8 @@
+export interface Submission<T> {
+  key: string;
+  payload: T;
+}
+
 /**
  * Hands out `Idempotency-Key`s so that re-submitting the *same* request reuses
  * its key, and anything else gets a fresh one.
@@ -9,21 +14,31 @@
  *
  * A key per click would not help, and a key per form would be wrong: change
  * the amount after a failure and the old key now names a different request,
- * which the API rightly refuses with a 422. So the key follows the payload.
+ * which the API rightly refuses with a 422.
+ *
+ * So a submission is identified by what the person entered, and the payload
+ * built from it is frozen alongside the key. Rebuilding it on the retry is not
+ * safe: a payload can carry values derived at submit time — an expense dated
+ * today is stamped with the current moment — and a retry would then differ
+ * from the original, take a new key, and file the duplicate this prevents.
  */
 export class IdempotencyKeys {
-  private current: { payload: string; key: string } | null = null;
+  private current: { identity: string; submission: Submission<unknown> } | null = null;
 
   constructor(private readonly generate: () => string = () => crypto.randomUUID()) {}
 
-  keyFor(payload: unknown): string {
-    const serialised = JSON.stringify(payload);
+  /**
+   * The key and payload for what was entered: the stored ones when `entered`
+   * matches the last submission, otherwise a fresh key and a newly built payload.
+   */
+  submissionFor<T>(entered: unknown, build: () => T): Submission<T> {
+    const identity = JSON.stringify(entered);
 
-    if (this.current?.payload !== serialised) {
-      this.current = { payload: serialised, key: this.generate() };
+    if (this.current?.identity !== identity) {
+      this.current = { identity, submission: { key: this.generate(), payload: build() } };
     }
 
-    return this.current.key;
+    return this.current.submission as Submission<T>;
   }
 
   /** Called once a submission succeeds, so an identical next one is a new expense. */

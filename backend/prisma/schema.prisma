@@ -46,10 +46,12 @@ model User {
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
-  refreshTokens  RefreshToken[]
-  oauthAccounts  OAuthAccount[]
-  vehicles       Vehicle[]
-  vehicleMembers VehicleMember[]
+  refreshTokens   RefreshToken[]
+  oauthAccounts   OAuthAccount[]
+  vehicles        Vehicle[]
+  vehicleMembers  VehicleMember[]
+  expenses        Expense[]
+  idempotencyKeys IdempotencyKey[]
 
   @@map("users")
 }
@@ -213,6 +215,7 @@ model Vehicle {
 
   members          VehicleMember[]
   odometerReadings OdometerReading[]
+  expenses         Expense[]
 
   @@unique([ownerId, licensePlate])
   @@index([ownerId])
@@ -271,4 +274,106 @@ model OdometerReading {
   @@index([vehicleId, recordedAt])
   @@index([vehicleId, odometerKm])
   @@map("odometer_readings")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4 — the cost ledger
+// ---------------------------------------------------------------------------
+
+enum ExpenseCategory {
+  FUEL
+  MAINTENANCE
+  REPAIR
+  INSURANCE
+  TAX
+  PARKING
+  TOLL
+  CLEANING
+  ACCESSORIES
+  TIRES
+  INSPECTION
+  OTHER
+}
+
+/// Which feature wrote the row. Phase 4 only writes `MANUAL`; fuel entries and
+/// maintenance records arrive in Phases 5 and 6 and own a 1:1 expense each.
+enum ExpenseSource {
+  MANUAL
+  FUEL
+  MAINTENANCE
+}
+
+/// Every cost the vehicle incurs, whichever feature recorded it.
+///
+/// One table rather than one per feature, so "what has this car cost me" is a
+/// single indexed aggregate instead of a four-way UNION. See ADR-004.
+///
+/// There is deliberately no `currency` column: amounts are in the owner's
+/// display currency until per-record currency is a product decision rather
+/// than a schema detail (ADR-016).
+model Expense {
+  id        String  @id @default(uuid(7)) @db.Uuid
+  vehicleId String  @db.Uuid
+  vehicle   Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  /// Attribution, not ownership — the expense belongs to the vehicle. Nullable
+  /// so that a shared editor deleting their account does not take part of
+  /// someone else's cost history with them.
+  createdById String? @db.Uuid
+  createdBy   User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  category ExpenseCategory
+  /// Always positive; the migration adds a CHECK so the database refuses a
+  /// zero or a refund-by-sign rather than trusting every writer to validate.
+  amount   Decimal         @db.Decimal(12, 3)
+
+  incurredAt DateTime @db.Timestamptz(3)
+  /// When present, the same transaction writes an `OdometerReading` with
+  /// `source = EXPENSE` and `sourceId` pointing back here.
+  odometerKm Int?
+
+  description String? @db.VarChar(200)
+  vendor      String? @db.VarChar(120)
+  notes       String? @db.Text
+
+  /// A fuel- or maintenance-derived row is edited through its owning record,
+  /// never directly, or its amount and its source would disagree.
+  sourceType ExpenseSource @default(MANUAL)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  /// `(vehicleId, incurredAt DESC)` serves the paginated ledger;
+  /// `(vehicleId, category, incurredAt)` serves spend by category for a period.
+  @@index([vehicleId, incurredAt(sort: Desc)])
+  @@index([vehicleId, category, incurredAt])
+  @@map("expenses")
+}
+
+/// A client-supplied `Idempotency-Key`, remembered against what it created.
+///
+/// A double-tapped submit on a slow connection must not file the same cost
+/// twice. The key is inserted in the same transaction as the resource, so two
+/// concurrent requests carrying it cannot both succeed: the unique index lets
+/// exactly one commit, and the other replays the winner. See api.md §8.
+model IdempotencyKey {
+  id     String @id @default(uuid(7)) @db.Uuid
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  key         String   @db.VarChar(255)
+  /// The operation the key was spent on, e.g. `expense.create`.
+  scope       String   @db.VarChar(64)
+  /// SHA-256 of the scope, target and body. A reused key with a different
+  /// request is a client bug, and is refused rather than silently replayed.
+  requestHash String   @db.Char(64)
+  /// Not a foreign key: it points into whichever table `scope` writes.
+  resourceId  String   @db.Uuid
+  createdAt   DateTime @default(now()) @db.Timestamptz(3)
+
+  /// Scoped per user, so one person's key can never collide with another's.
+  @@unique([userId, key])
+  /// For the purge job that expires old keys (Phase 7).
+  @@index([createdAt])
+  @@map("idempotency_keys")
 }

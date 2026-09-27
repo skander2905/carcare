@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import { type Prisma } from '../generated/prisma/client.js';
 import { OdometerSource } from '../generated/prisma/enums.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { type OdometerReading } from '../prisma/model.types.js';
@@ -35,48 +36,89 @@ export class OdometerService {
   ) {}
 
   async record(vehicleId: string, input: RecordReadingInput): Promise<OdometerReading> {
-    return this.prisma.$transaction(async (tx) => {
-      // Serialise concurrent writes for this vehicle before reading anything
-      // the decision depends on.
-      await this.readings.lockVehicle(tx, vehicleId);
+    return this.prisma.$transaction((tx) => this.recordIn(tx, vehicleId, input));
+  }
 
-      const [previous, next] = await Promise.all([
-        this.readings.previousReading(tx, vehicleId, input.recordedAt),
-        this.readings.nextReading(tx, vehicleId, input.recordedAt),
-      ]);
+  /**
+   * `record`, inside a transaction the caller owns.
+   *
+   * An expense carrying a mileage value must land together with its reading or
+   * not at all — so the expense service opens the transaction, and the
+   * reading's validation runs inside it. A conflict thrown here rolls back the
+   * expense too.
+   */
+  async recordIn(
+    tx: Prisma.TransactionClient,
+    vehicleId: string,
+    input: RecordReadingInput,
+  ): Promise<OdometerReading> {
+    // Serialise concurrent writes for this vehicle before reading anything the
+    // decision depends on. Re-locking a row this transaction already holds is
+    // a no-op, so a caller that locked first loses nothing.
+    await this.readings.lockVehicle(tx, vehicleId);
 
-      const conflict = findTimelineConflict(input.odometerKm, previous, next);
+    const [previous, next] = await Promise.all([
+      this.readings.previousReading(tx, vehicleId, input.recordedAt),
+      this.readings.nextReading(tx, vehicleId, input.recordedAt),
+    ]);
 
-      // A 400 with an actionable message, not a 422: the value is the wrong
-      // shape for this timeline, and the message names the reading in the way.
-      if (conflict) throw new BadRequestException(describeConflict(conflict));
+    const conflict = findTimelineConflict(input.odometerKm, previous, next);
 
-      const data: NewReading = {
-        vehicleId,
-        recordedAt: input.recordedAt,
-        odometerKm: input.odometerKm,
-        source: input.source ?? OdometerSource.MANUAL,
-        ...(input.sourceId ? { sourceId: input.sourceId } : {}),
-        ...(input.notes ? { notes: input.notes } : {}),
-      };
+    // A 400 with an actionable message, not a 422: the value is the wrong
+    // shape for this timeline, and the message names the reading in the way.
+    if (conflict) throw new BadRequestException(describeConflict(conflict));
 
-      const reading = await this.readings.create(tx, data);
+    const data: NewReading = {
+      vehicleId,
+      recordedAt: input.recordedAt,
+      odometerKm: input.odometerKm,
+      source: input.source ?? OdometerSource.MANUAL,
+      ...(input.sourceId ? { sourceId: input.sourceId } : {}),
+      ...(input.notes ? { notes: input.notes } : {}),
+    };
 
-      // Same transaction as the reading, so the headline figure and the
-      // timeline cannot disagree even if the process dies here.
-      const vehicle = await tx.vehicle.findUniqueOrThrow({
-        where: { id: vehicleId },
-        select: { currentOdometerKm: true },
-      });
+    const reading = await this.readings.create(tx, data);
 
-      const current = nextCurrentOdometer(vehicle.currentOdometerKm, input.odometerKm);
-
-      if (current !== vehicle.currentOdometerKm) {
-        await tx.vehicle.update({ where: { id: vehicleId }, data: { currentOdometerKm: current } });
-      }
-
-      return reading;
+    // Same transaction as the reading, so the headline figure and the
+    // timeline cannot disagree even if the process dies here.
+    const vehicle = await tx.vehicle.findUniqueOrThrow({
+      where: { id: vehicleId },
+      select: { currentOdometerKm: true },
     });
+
+    const current = nextCurrentOdometer(vehicle.currentOdometerKm, input.odometerKm);
+
+    if (current !== vehicle.currentOdometerKm) {
+      await tx.vehicle.update({ where: { id: vehicleId }, data: { currentOdometerKm: current } });
+    }
+
+    return reading;
+  }
+
+  /**
+   * Withdraws the readings a record produced — when an expense is deleted, or
+   * its mileage or date changes and the reading has to move.
+   *
+   * The headline figure is re-derived rather than left alone. If the removed
+   * reading was the highest, keeping `currentOdometerKm` would report a mileage
+   * that no longer appears anywhere on the timeline, and every later reading
+   * would be validated against a number nobody can see or correct.
+   */
+  async removeForSource(
+    tx: Prisma.TransactionClient,
+    vehicleId: string,
+    source: OdometerSource,
+    sourceId: string,
+  ): Promise<void> {
+    await this.readings.lockVehicle(tx, vehicleId);
+
+    const removed = await this.readings.deleteBySource(tx, vehicleId, source, sourceId);
+    if (removed === 0) return;
+
+    // Zero for an emptied timeline, matching a vehicle created without a
+    // starting mileage.
+    const highest = (await this.readings.highestOdometer(tx, vehicleId)) ?? 0;
+    await tx.vehicle.update({ where: { id: vehicleId }, data: { currentOdometerKm: highest } });
   }
 
   /**

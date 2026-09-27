@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
 import { IsDateString, IsInt, IsOptional, IsString, Length, Max, Min } from 'class-validator';
+import { PageQueryDto } from '../../common/http/page-query.dto.js';
 import { MAX_ODOMETER_KM } from '../../vehicles/dto/vehicle.dto.js';
 import { type OdometerReading } from '../../prisma/model.types.js';
 
@@ -28,10 +29,7 @@ export class RecordReadingDto {
   notes?: string;
 }
 
-const DEFAULT_LIMIT = 25;
-const MAX_LIMIT = 100;
-
-export class ListReadingsQueryDto {
+export class ListReadingsQueryDto extends PageQueryDto {
   @ApiPropertyOptional({ example: '2026-01-01T00:00:00.000Z' })
   @IsOptional()
   @IsDateString()
@@ -41,22 +39,6 @@ export class ListReadingsQueryDto {
   @IsOptional()
   @IsDateString()
   to?: string;
-
-  @ApiPropertyOptional({ default: 1, minimum: 1 })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page = 1;
-
-  @ApiPropertyOptional({ default: DEFAULT_LIMIT, maximum: MAX_LIMIT })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  // Capped server-side so a client cannot ask for the entire timeline at once.
-  @Max(MAX_LIMIT)
-  limit = DEFAULT_LIMIT;
 }
 
 export class OdometerReadingResponse {

@@ -59,6 +59,27 @@ export class OdometerRepository {
     return client.odometerReading.create({ data });
   }
 
+  /** Removes the readings a fuel entry, expense or other record produced. */
+  async deleteBySource(
+    client: PrismaLike,
+    vehicleId: string,
+    source: OdometerSource,
+    sourceId: string,
+  ): Promise<number> {
+    const { count } = await client.odometerReading.deleteMany({ where: { vehicleId, source, sourceId } });
+    return count;
+  }
+
+  /** The highest reading on the timeline, or null for a vehicle with none. */
+  async highestOdometer(client: PrismaLike, vehicleId: string): Promise<number | null> {
+    const { _max } = await client.odometerReading.aggregate({
+      where: { vehicleId },
+      _max: { odometerKm: true },
+    });
+
+    return _max.odometerKm;
+  }
+
   list(vehicleId: string, filter: ReadingFilter): Promise<OdometerReading[]> {
     return this.prisma.odometerReading.findMany({
       where: { vehicleId, ...this.dateRange(filter) },

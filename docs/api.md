@@ -228,3 +228,17 @@ returns a `400` with an actionable message.
 plausible and harmful (creating an expense from a slow mobile connection) accept
 an `Idempotency-Key` header; the key is stored with the created resource id and
 a repeat returns the original result rather than creating a duplicate.
+
+`POST /vehicles/:id/expenses` implements it. The key is stored in the same
+transaction as the expense under a unique `(user, key)` index, so concurrent
+duplicates cannot both commit.
+
+| Situation                                      | Response                                                 |
+| ---------------------------------------------- | -------------------------------------------------------- |
+| Retry with the same key and body               | `201`, the original expense, `Idempotent-Replayed: true` |
+| Same key, different body or endpoint           | `422` — generate a key per submission                    |
+| Same key, but that expense was since deleted   | `409` — never silently recreated                         |
+| Malformed key (not 1–255 printable, no spaces) | `400`                                                    |
+
+Browsers can only send the header because it is in the CORS allow-list, and can
+only read `Idempotent-Replayed` because it is exposed (`common/http/cors.ts`).

@@ -38,7 +38,7 @@ export class S3ObjectStorage extends ObjectStorage implements OnModuleDestroy {
     super();
     this.enabled = config.enabled;
     this.internal = config.enabled ? this.client(config.endpoint) : null;
-    this.signer = config.enabled ? this.client(config.publicEndpoint) : null;
+    this.signer = config.enabled ? this.client(config.publicEndpoint, { presigning: true }) : null;
   }
 
   async presignUpload({
@@ -118,10 +118,23 @@ export class S3ObjectStorage extends ObjectStorage implements OnModuleDestroy {
     this.signer?.destroy();
   }
 
-  private client(endpoint: string | undefined): S3Client {
+  private client(endpoint: string | undefined, { presigning = false } = {}): S3Client {
     return new S3Client({
       region: this.config.region,
       forcePathStyle: this.config.forcePathStyle,
+      /*
+       * Presigned uploads must not carry an SDK-computed checksum.
+       *
+       * By default the SDK adds `x-amz-checksum-crc32` to a presigned PUT —
+       * computed at signing time, over a body that does not exist yet, so it is
+       * always the checksum of nothing (`AAAAAA==`). MinIO ignores it; AWS S3
+       * verifies it and rejects every real upload. Found in the browser against
+       * MinIO, where the upload succeeded and the URL gave it away.
+       *
+       * Only the signer: DeleteObjects genuinely requires a checksum, and the
+       * internal client keeps sending one.
+       */
+      ...(presigning ? { requestChecksumCalculation: 'WHEN_REQUIRED' as const } : {}),
       ...(endpoint ? { endpoint } : {}),
       ...(this.config.credentials ? { credentials: this.config.credentials } : {}),
     });

@@ -93,12 +93,13 @@ export class VehiclesService {
    * for a vehicle that was entered by mistake.
    */
   async remove(vehicleId: string): Promise<void> {
-    // Collected first: once the vehicle is gone, its document rows are too,
-    // and nothing would say where the files are. An upload landing in between
-    // leaves an orphan for the Phase 7 sweep, not a dangling row.
-    const keys = await this.vehicles.documentKeys(vehicleId);
+    // Collected in the deleting transaction: once the vehicle is gone, its
+    // document rows are too, and nothing would say where the files are.
+    const keys = await this.vehicles.deleteReturningDocumentKeys(vehicleId);
 
-    await this.vehicles.delete(vehicleId);
+    // After the commit, never inside it: see purgeObjects. A file still being
+    // PUT through an already-issued upload URL can land after this — only the
+    // Phase 7 sweep can reclaim that one.
     await purgeObjects(this.storage, keys, this.logger);
   }
 }

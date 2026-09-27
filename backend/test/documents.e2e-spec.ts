@@ -134,6 +134,27 @@ describe('Documents (e2e)', () => {
       await requestUpload({ expenseId: theirExpense.body.id }).expect(404);
     });
 
+    it('accepts a long file name, cutting only the default title', async () => {
+      const fileName = `${'receipt-'.repeat(31)}x.jpg`; // 253 characters
+      const { body } = (await requestUpload({ fileName }).expect(201)) as { body: UploadBody };
+
+      expect(body.document.fileName).toBe(fileName);
+      expect(body.document.title).toBe(fileName.slice(0, 200));
+    });
+
+    /** Count-then-insert without a lock let simultaneous requests overshoot. */
+    it('holds the cap under simultaneous requests', async () => {
+      for (let i = 0; i < 8; i++) await requestUpload().expect(201);
+
+      const statuses = (await Promise.all(Array.from({ length: 6 }, () => requestUpload()))).map(
+        (r) => r.status,
+      );
+
+      expect(statuses.filter((status) => status === 201)).toHaveLength(2);
+      expect(statuses.filter((status) => status === 409)).toHaveLength(4);
+      expect(await prisma.document.count({ where: { expenseId } })).toBe(10);
+    });
+
     it('caps attachments per expense', async () => {
       for (let i = 0; i < 10; i++) await requestUpload().expect(201);
       await requestUpload().expect(409);

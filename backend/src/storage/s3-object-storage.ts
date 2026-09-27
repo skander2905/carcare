@@ -20,6 +20,9 @@ import {
   contentDisposition,
 } from './object-storage.js';
 
+/** The S3 API's own limit for one DeleteObjects request. */
+export const DELETE_BATCH_SIZE = 1000;
+
 @Injectable()
 export class S3ObjectStorage extends ObjectStorage implements OnModuleDestroy {
   readonly enabled: boolean;
@@ -102,15 +105,23 @@ export class S3ObjectStorage extends ObjectStorage implements OnModuleDestroy {
     }
   }
 
+  /**
+   * In batches: DeleteObjects takes at most 1,000 keys per request, and a
+   * vehicle can hold more documents than that. One oversized request fails
+   * whole — after the rows are already gone — orphaning every file in it.
+   */
   async delete(keys: string[]): Promise<void> {
-    if (keys.length === 0) return;
+    const client = this.require(this.internal);
 
-    await this.require(this.internal).send(
-      new DeleteObjectsCommand({
-        Bucket: this.config.bucket,
-        Delete: { Objects: keys.map((Key) => ({ Key })), Quiet: true },
-      }),
-    );
+    for (let start = 0; start < keys.length; start += DELETE_BATCH_SIZE) {
+      const batch = keys.slice(start, start + DELETE_BATCH_SIZE);
+      await client.send(
+        new DeleteObjectsCommand({
+          Bucket: this.config.bucket,
+          Delete: { Objects: batch.map((Key) => ({ Key })), Quiet: true },
+        }),
+      );
+    }
   }
 
   onModuleDestroy(): void {

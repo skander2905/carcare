@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { S3ObjectStorage } from './s3-object-storage.js';
+import { describe, expect, it, vi } from 'vitest';
+import { DELETE_BATCH_SIZE, S3ObjectStorage } from './s3-object-storage.js';
 
 /** Presigning is local computation, so these need no bucket and no network. */
 const storage = new S3ObjectStorage({
@@ -61,5 +61,30 @@ describe('S3ObjectStorage without credentials', () => {
     await expect(
       disabled.presignUpload({ key: 'k', contentType: 'image/png', sizeBytes: 1, expiresInSeconds: 60 }),
     ).rejects.toThrow('not configured');
+  });
+});
+
+describe('S3ObjectStorage.delete', () => {
+  /** DeleteObjects takes at most 1,000 keys; a vehicle can hold more documents. */
+  it('splits large deletions into batches the API accepts', async () => {
+    const send = vi.fn().mockResolvedValue({});
+    // The internal client is private; reaching it is the point of this test.
+    (storage as unknown as { internal: { send: typeof send } }).internal.send = send;
+
+    const keys = Array.from({ length: 2 * DELETE_BATCH_SIZE + 500 }, (_, i) => `k${i}`);
+    await storage.delete(keys);
+
+    const sizes = send.mock.calls.map(
+      ([command]) => (command as { input: { Delete: { Objects: unknown[] } } }).input.Delete.Objects.length,
+    );
+    expect(sizes).toEqual([1000, 1000, 500]);
+  });
+
+  it('sends nothing for no keys', async () => {
+    const send = vi.fn();
+    (storage as unknown as { internal: { send: typeof send } }).internal.send = send;
+
+    await storage.delete([]);
+    expect(send).not.toHaveBeenCalled();
   });
 });

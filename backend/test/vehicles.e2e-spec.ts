@@ -78,6 +78,28 @@ describe('Vehicles (e2e)', () => {
       expect(body.engineSize).toBe('1.6');
     });
 
+    /**
+     * Amounts carry no currency of their own, so the vehicle names it — the
+     * owner's, never the viewer's, which differ as soon as a vehicle is shared.
+     */
+    it("carries its owner's currency, and follows the owner's preference", async () => {
+      const token = await signUp('owner@example.com');
+      const { body } = await createVehicle(token).expect(201);
+      expect(body.currency).toBe('TND');
+
+      await request(httpServer(app))
+        .patch('/api/v1/users/me')
+        .set('Authorization', `Bearer ${token}`)
+        .send({ currency: 'EUR' })
+        .expect(200);
+
+      const reread = await request(httpServer(app))
+        .get(`/api/v1/vehicles/${body.id}`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      expect(reread.body.currency).toBe('EUR');
+    });
+
     it('seeds the odometer timeline with the starting mileage', async () => {
       const token = await signUp('owner@example.com');
       const { body: vehicle } = await createVehicle(token).expect(201);

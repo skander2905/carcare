@@ -16,6 +16,18 @@ export type VehicleChanges = Omit<
   'id' | 'ownerId' | 'createdAt' | 'updatedAt' | 'currentOdometerKm'
 >;
 
+/**
+ * Every vehicle read carries its owner's currency.
+ *
+ * Amounts carry no currency of their own (ADR-016) — they are in the owner's
+ * display currency. Labelling them with the *viewer's* currency is right only
+ * while the viewer is always the owner; once a vehicle is shared, a member who
+ * prefers EUR would see the owner's dinars labelled as euros.
+ */
+const WITH_OWNER_CURRENCY = { owner: { select: { currency: true } } } as const;
+
+export type VehicleWithCurrency = Vehicle & { owner: { currency: string } };
+
 @Injectable()
 export class VehiclesRepository {
   constructor(private readonly prisma: PrismaService) {}
@@ -28,13 +40,14 @@ export class VehiclesRepository {
    * creator would immediately 404 on the thing they just made, and its license
    * plate would still occupy the unique index.
    */
-  createOwned(ownerId: string, data: NewVehicle): Promise<Vehicle> {
+  createOwned(ownerId: string, data: NewVehicle): Promise<VehicleWithCurrency> {
     return this.prisma.vehicle.create({
       data: {
         ...data,
         ownerId,
         members: { create: { userId: ownerId, role: VehicleRole.OWNER } },
       },
+      include: WITH_OWNER_CURRENCY,
     });
   }
 
@@ -43,22 +56,23 @@ export class VehiclesRepository {
    * through `ownerId` — so a shared vehicle appears here the day sharing ships,
    * with no change to this query.
    */
-  listForUser(userId: string, includeArchived: boolean): Promise<Vehicle[]> {
+  listForUser(userId: string, includeArchived: boolean): Promise<VehicleWithCurrency[]> {
     return this.prisma.vehicle.findMany({
       where: {
         members: { some: { userId } },
         ...(includeArchived ? {} : { archivedAt: null }),
       },
       orderBy: [{ archivedAt: { sort: 'asc', nulls: 'first' } }, { createdAt: 'desc' }],
+      include: WITH_OWNER_CURRENCY,
     });
   }
 
-  findById(vehicleId: string): Promise<Vehicle | null> {
-    return this.prisma.vehicle.findUnique({ where: { id: vehicleId } });
+  findById(vehicleId: string): Promise<VehicleWithCurrency | null> {
+    return this.prisma.vehicle.findUnique({ where: { id: vehicleId }, include: WITH_OWNER_CURRENCY });
   }
 
-  update(vehicleId: string, data: VehicleChanges): Promise<Vehicle> {
-    return this.prisma.vehicle.update({ where: { id: vehicleId }, data });
+  update(vehicleId: string, data: VehicleChanges): Promise<VehicleWithCurrency> {
+    return this.prisma.vehicle.update({ where: { id: vehicleId }, data, include: WITH_OWNER_CURRENCY });
   }
 
   /** Cascades to memberships, odometer readings and every cost record. */

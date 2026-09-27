@@ -1,9 +1,8 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '../generated/prisma/client.js';
-import { type Vehicle } from '../prisma/model.types.js';
 import { OdometerService } from '../odometer/odometer.service.js';
 import { type CreateVehicleDto, type UpdateVehicleDto } from './dto/vehicle.dto.js';
-import { VehiclesRepository } from './vehicles.repository.js';
+import { type VehicleWithCurrency, VehiclesRepository } from './vehicles.repository.js';
 
 const UNIQUE_VIOLATION = 'P2002';
 
@@ -14,10 +13,10 @@ export class VehiclesService {
     private readonly odometer: OdometerService,
   ) {}
 
-  async create(ownerId: string, dto: CreateVehicleDto): Promise<Vehicle> {
+  async create(ownerId: string, dto: CreateVehicleDto): Promise<VehicleWithCurrency> {
     const { initialOdometerKm, ...fields } = dto;
 
-    let vehicle: Vehicle;
+    let vehicle: VehicleWithCurrency;
 
     try {
       vehicle = await this.vehicles.createOwned(ownerId, {
@@ -48,7 +47,7 @@ export class VehiclesService {
     return vehicle;
   }
 
-  list(userId: string, includeArchived: boolean): Promise<Vehicle[]> {
+  list(userId: string, includeArchived: boolean): Promise<VehicleWithCurrency[]> {
     return this.vehicles.listForUser(userId, includeArchived);
   }
 
@@ -56,14 +55,14 @@ export class VehiclesService {
    * The id has already been authorised by `VehicleAccessGuard`, so a missing
    * row here means it was deleted between the guard and this read.
    */
-  async findOne(vehicleId: string): Promise<Vehicle> {
+  async findOne(vehicleId: string): Promise<VehicleWithCurrency> {
     const vehicle = await this.vehicles.findById(vehicleId);
     if (!vehicle) throw new NotFoundException('Vehicle not found');
 
     return vehicle;
   }
 
-  async update(vehicleId: string, dto: UpdateVehicleDto): Promise<Vehicle> {
+  async update(vehicleId: string, dto: UpdateVehicleDto): Promise<VehicleWithCurrency> {
     const { isArchived, purchaseDate, ...fields } = dto;
 
     try {

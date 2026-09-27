@@ -5,18 +5,19 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useAuth } from '@/features/auth/use-auth';
 import { expenseKeys, expensesApi } from '@/lib/expenses/expenses-api';
 import { type ExpenseFilters } from '@/lib/expenses/types';
 import { ExpenseRow } from './expense-row';
 
 const RECENT: ExpenseFilters = { page: 1, limit: 5 };
 
-/** The five latest costs on the vehicle page, with a way into the full ledger. */
-export function RecentExpenses({ vehicleId }: { vehicleId: string }) {
-  const { user } = useAuth();
-  const currency = user?.currency ?? 'TND';
-
+/**
+ * The five latest costs on the vehicle page, with a way into the full ledger.
+ *
+ * `currency` is the vehicle's — its owner's — never the viewer's: amounts carry
+ * no currency of their own, and a shared member may prefer a different one.
+ */
+export function RecentExpenses({ vehicleId, currency }: { vehicleId: string; currency: string }) {
   const expenses = useQuery({
     queryKey: expenseKeys.list(vehicleId, RECENT),
     queryFn: () => expensesApi.list(vehicleId, RECENT),

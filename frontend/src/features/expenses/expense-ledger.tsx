@@ -10,7 +10,6 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useAuth } from '@/features/auth/use-auth';
 import { ApiError } from '@/lib/api/client';
 import { expenseKeys, expensesApi } from '@/lib/expenses/expenses-api';
 import { categoryLabel, dayRange, formatExpenseDate } from '@/lib/expenses/format';
@@ -98,16 +97,14 @@ function DeleteButton({ expense, currency }: { expense: Expense; currency: strin
   );
 }
 
-export function ExpenseLedger({
-  vehicleId,
-  startAdding = false,
-}: {
+export interface ExpenseLedgerProps {
   vehicleId: string;
+  /** The vehicle's currency, never the viewer's — see RecentExpenses. */
+  currency: string;
   startAdding?: boolean;
-}) {
-  const { user } = useAuth();
-  const currency = user?.currency ?? 'TND';
+}
 
+export function ExpenseLedger({ vehicleId, currency, startAdding = false }: ExpenseLedgerProps) {
   const [adding, setAdding] = useState(startAdding);
   const [editingId, setEditingId] = useState<string | null>(null);
 

@@ -139,14 +139,14 @@ export default function VehicleDetailPage() {
         <CardContent>
           <dl className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <Spec label="Mileage" value={formatKm(data.currentOdometerKm)} />
-            <Spec label="Purchase price" value={formatMoney(data.purchasePrice)} />
+            <Spec label="Purchase price" value={formatMoney(data.purchasePrice, data.currency)} />
             <Spec label="Colour" value={data.color} />
             <Spec label="VIN" value={data.vin} />
           </dl>
         </CardContent>
       </Card>
 
-      <RecentExpenses vehicleId={data.id} />
+      <RecentExpenses vehicleId={data.id} currency={data.currency} />
 
       <OdometerTimeline vehicleId={data.id} />
 

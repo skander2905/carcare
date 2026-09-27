@@ -15,6 +15,7 @@ const vehicle = (overrides: Partial<Vehicle> = {}): Vehicle => ({
   currentOdometerKm: 121_500,
   purchaseDate: null,
   purchasePrice: null,
+  currency: 'TND',
   color: null,
   notes: null,
   archivedAt: null,

@@ -41,8 +41,12 @@ services:
 
   # S3-compatible object storage. The API starts using it in Phase 8 (documents);
   # it runs from the start so the local environment never has to change shape.
+  # MinIO stopped publishing images to Docker Hub (minio/minio and minio/mc now
+  # 404). Chainguard's rebuild is the same server, kept current. It ships no
+  # shell and no `mc`, so there is no in-container healthcheck; minio-init
+  # below retries until the server answers instead.
   minio:
-    image: minio/minio:latest
+    image: chainguard/minio:latest
     restart: unless-stopped
     command: ['server', '/data', '--console-address', ':9001']
     environment:
@@ -52,26 +56,22 @@ services:
       - '${MINIO_PORT:-9000}:9000'
       - '${MINIO_CONSOLE_PORT:-9001}:9001'
     volumes:
+      # The image runs as uid 65532; its /data is world-writable, so a fresh
+      # named volume inherits permissions it can write to.
       - minio-data:/data
-    healthcheck:
-      test: ['CMD', 'mc', 'ready', 'local']
-      interval: 10s
-      timeout: 5s
-      retries: 10
 
-  # One-shot: creates the bucket, then exits. `docker compose up` waits for it.
+  # One-shot: creates the bucket, then exits. Retried on failure because the
+  # server may not be accepting connections yet, and there is no healthcheck
+  # to wait on. `mc` takes its alias from MC_HOST_<name>, since the image has
+  # no shell to run `mc alias set` first.
   minio-init:
-    image: minio/mc:latest
+    image: chainguard/minio-client:latest
     depends_on:
-      minio:
-        condition: service_healthy
-    entrypoint: >
-      /bin/sh -c "
-      mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-carcare} ${MINIO_ROOT_PASSWORD:-carcare-dev-secret} &&
-      mc mb --ignore-existing local/${S3_BUCKET:-carcare-documents} &&
-      echo 'MinIO bucket ready'
-      "
-    restart: 'no'
+      - minio
+    environment:
+      MC_HOST_local: http://${MINIO_ROOT_USER:-carcare}:${MINIO_ROOT_PASSWORD:-carcare-dev-secret}@minio:9000
+    command: ['mb', '--ignore-existing', 'local/${S3_BUCKET:-carcare-documents}']
+    restart: on-failure:10
 
   # Migrations run as their own short-lived service rather than inside the API
   # entrypoint. With multiple API replicas, an entrypoint migration means N

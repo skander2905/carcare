@@ -7,6 +7,7 @@ import helmet from 'helmet';
 import { Logger as PinoNestLogger } from 'nestjs-pino';
 import { AppModule } from './app.module.js';
 import { ApiErrorResponse } from './common/http/api-error.js';
+import { buildCorsOptions } from './common/http/cors.js';
 import { notFoundHandler } from './common/http/not-found.handler.js';
 import { appConfig, httpConfig, swaggerConfig } from './config/configuration.js';
 import { type AppConfig, type HttpConfig, type SwaggerConfig } from './config/config.types.js';
@@ -40,15 +41,7 @@ async function bootstrap(): Promise<void> {
   app.useBodyParser('json', { limit: BODY_LIMIT });
   app.useBodyParser('urlencoded', { limit: BODY_LIMIT, extended: true });
 
-  app.enableCors({
-    origin: http.corsOrigins,
-    // Required for the httpOnly refresh-token cookie to be sent at all.
-    credentials: true,
-    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-Id'],
-    exposedHeaders: ['X-Request-Id'],
-    maxAge: 86_400,
-  });
+  app.enableCors(buildCorsOptions(http.corsOrigins));
 
   app.setGlobalPrefix(http.globalPrefix, {
     exclude: ['health', 'health/live', 'health/ready'],

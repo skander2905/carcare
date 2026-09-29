@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Paperclip, Plus } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,6 +21,7 @@ import {
   type ExpenseSort,
 } from '@/lib/expenses/types';
 import { formatMoney } from '@/lib/vehicles/format';
+import { useDebounced } from '@/lib/use-debounced';
 import { vehicleKeys } from '@/lib/vehicles/vehicles-api';
 import { AttachmentsPanel } from './attachments-panel';
 import { ExpenseForm } from './expense-form';
@@ -34,18 +35,6 @@ const SORT_LABELS: Record<ExpenseSort, string> = {
   'amount:desc': 'Largest first',
   'amount:asc': 'Smallest first',
 };
-
-/** Waits for typing to pause, so a search is one request rather than one per key. */
-function useDebounced<T>(value: T, delayMs: number): T {
-  const [debounced, setDebounced] = useState(value);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setDebounced(value), delayMs);
-    return () => clearTimeout(timer);
-  }, [value, delayMs]);
-
-  return debounced;
-}
 
 /**
  * "Fuel, 45.500 TND on 27 Sept 2026" — so each row's buttons are told apart by

@@ -53,6 +53,7 @@ model User {
   expenses        Expense[]
   idempotencyKeys IdempotencyKey[]
   documents       Document[]
+  fuelEntries     FuelEntry[]
 
   @@map("users")
 }
@@ -218,6 +219,7 @@ model Vehicle {
   odometerReadings OdometerReading[]
   expenses         Expense[]
   documents        Document[]
+  fuelEntries      FuelEntry[]
 
   @@unique([ownerId, licensePlate])
   @@index([ownerId])
@@ -346,6 +348,8 @@ model Expense {
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
   documents Document[]
+  /// Set when a fuel entry owns this row (`sourceType = FUEL`).
+  fuelEntry FuelEntry?
 
   /// `(vehicleId, incurredAt DESC)` serves the paginated ledger;
   /// `(vehicleId, category, incurredAt)` serves spend by category for a period.
@@ -452,4 +456,64 @@ model Document {
   /// For the job that sweeps uploads never confirmed (Phase 7).
   @@index([status, createdAt])
   @@map("documents")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 5 — fuel
+// ---------------------------------------------------------------------------
+
+/// One visit to the pump.
+///
+/// Owns a 1:1 `Expense` (category FUEL, source FUEL) holding its cost, and an
+/// `OdometerReading` (source FUEL) holding its mileage — all three written in
+/// one transaction, so the ledger, the timeline and the fuel log cannot
+/// disagree. See ADR-004 and ADR-018.
+model FuelEntry {
+  id        String  @id @default(uuid(7)) @db.Uuid
+  vehicleId String  @db.Uuid
+  vehicle   Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  /// Attribution, nullable for the same reason as `Expense.createdById`.
+  createdById String? @db.Uuid
+  createdBy   User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  /// The ledger row. Deleting the entry deletes it through the service, and
+  /// the cascade covers the vehicle being deleted underneath both.
+  expenseId String  @unique @db.Uuid
+  expense   Expense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+
+  filledAt   DateTime @db.Timestamptz(3)
+  odometerKm Int
+
+  /// Litres to the centilitre — what a pump display shows.
+  volumeLiters  Decimal @db.Decimal(7, 2)
+  /// Millimes per litre, as the pump shows it.
+  pricePerLiter Decimal @db.Decimal(8, 3)
+  /// What was paid. Mirrored into `Expense.amount`; this is the source.
+  totalCost     Decimal @db.Decimal(12, 3)
+
+  fuelType FuelType
+
+  /// Filled to the brim. Only two full fills bound a consumption window.
+  isFullTank   Boolean @default(true)
+  /// A fill *before* this one was never logged, so the window ending here
+  /// is missing litres and must not produce a consumption figure.
+  isMissedFill Boolean @default(false)
+
+  stationName String? @db.VarChar(120)
+  /// Where the fill happened, when the browser shared it. Used only to
+  /// suggest this station the next time someone fills up nearby.
+  latitude    Decimal? @db.Decimal(9, 6)
+  longitude   Decimal? @db.Decimal(9, 6)
+
+  notes String? @db.Text
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  /// `(vehicleId, odometerKm)` orders the history for the consumption engine;
+  /// `(vehicleId, filledAt DESC)` serves the paginated log.
+  @@index([vehicleId, odometerKm])
+  @@index([vehicleId, filledAt(sort: Desc)])
+  @@map("fuel_entries")
 }

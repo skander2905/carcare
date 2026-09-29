@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Transform, Type } from 'class-transformer';
+import { Type } from 'class-transformer';
 import {
   IsDateString,
   IsEnum,
@@ -14,6 +14,7 @@ import {
 } from 'class-validator';
 import { PageQueryDto } from '../../common/http/page-query.dto.js';
 import { IsOptionalProperty } from '../../common/validation/optional.decorator.js';
+import { trimmedOrAbsent, trimmedOrNull } from '../../common/validation/trimmed.js';
 import { ExpenseCategory } from '../../generated/prisma/enums.js';
 import { MAX_ODOMETER_KM } from '../../vehicles/dto/vehicle.dto.js';
 
@@ -24,22 +25,8 @@ import { MAX_ODOMETER_KM } from '../../vehicles/dto/vehicle.dto.js';
  * 400 naming the field rather than a constraint violation surfacing as a 500.
  * Nine integer digits fit `numeric(12,3)` exactly.
  */
-const AMOUNT_PATTERN = /^(?!0+(?:\.0+)?$)\d{1,9}(?:\.\d{1,3})?$/;
-const AMOUNT_MESSAGE = 'amount must be a positive decimal string with up to 3 decimal places';
-
-/** Trimmed; an empty string means "not given" on create. */
-const trimmedOrAbsent = Transform(({ value }: { value: unknown }) => {
-  if (typeof value !== 'string') return value;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : undefined;
-});
-
-/** Trimmed; an empty string clears the field on update, exactly as null does. */
-const trimmedOrNull = Transform(({ value }: { value: unknown }) => {
-  if (typeof value !== 'string') return value;
-  const trimmed = value.trim();
-  return trimmed.length > 0 ? trimmed : null;
-});
+export const AMOUNT_PATTERN = /^(?!0+(?:\.0+)?$)\d{1,9}(?:\.\d{1,3})?$/;
+export const AMOUNT_MESSAGE = 'amount must be a positive decimal string with up to 3 decimal places';
 
 export class CreateExpenseDto {
   @ApiProperty({ enum: ExpenseCategory, example: ExpenseCategory.INSURANCE })

@@ -16,4 +16,5 @@ export type {
   ExpenseModel as Expense,
   IdempotencyKeyModel as IdempotencyKey,
   DocumentModel as Document,
+  FuelEntryModel as FuelEntry,
 } from '../generated/prisma/models.js';

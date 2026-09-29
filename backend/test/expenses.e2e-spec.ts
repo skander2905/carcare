@@ -460,6 +460,21 @@ describe('Expenses (e2e)', () => {
       expect((await list()).meta.total).toBe(1);
     });
 
+    /*
+     * With a mileage, each transaction also locks the vehicle for its reading.
+     * Taken after the insert, that lock deadlocked against the foreign-key
+     * lock the insert had just taken, and every submit but one failed with a
+     * 500. Found in Phase 5, where every fuel entry carries a mileage.
+     */
+    it('files one expense for simultaneous submits that carry a mileage', async () => {
+      const withMileage = { ...body, odometerKm: 100_500 };
+      const responses = await Promise.all(Array.from({ length: 5 }, () => withKey('burst-km', withMileage)));
+
+      expect(responses.map((response) => response.status)).toEqual([201, 201, 201, 201, 201]);
+      expect((await list()).meta.total).toBe(1);
+      expect((await readings()).filter((reading) => reading.source === 'EXPENSE')).toHaveLength(1);
+    });
+
     it('refuses a key reused for a different request', async () => {
       await withKey('submit-2').expect(201);
       await withKey('submit-2', { ...body, amount: '700' }).expect(422);

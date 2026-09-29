@@ -155,10 +155,13 @@ Check constraint: `amount > 0`.
 
 `id`, `vehicleId`, `createdById`, `expenseId` (unique), `filledAt`,
 `odometerKm`, `volumeLiters`, `pricePerLiter`, `totalCost`, `fuelType`,
-`isFullTank`, `isMissedFill`, `stationName?`, `notes?`, timestamps.
+`isFullTank`, `isMissedFill`, `stationName?`, `latitude?`, `longitude?`,
+`notes?`, timestamps.
 
 Indexes: `(vehicleId, odometerKm)`, `(vehicleId, filledAt DESC)`.
-Checks: `volumeLiters > 0`, `odometerKm >= 0`.
+Checks: `volumeLiters > 0`, `pricePerLiter > 0`, `totalCost > 0`,
+`odometerKm >= 0`, and both coordinates or neither. Coordinates are rounded to
+four places and kept only to recognise the station next time (ADR-018).
 
 `isFullTank` and `isMissedFill` are what make consumption correct rather than
 merely plausible — see [architecture.md](./architecture.md) and the fuel domain

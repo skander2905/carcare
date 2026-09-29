@@ -432,3 +432,47 @@ and it does not generalise to Apple, whose flow is a form POST. Auto-linking on
 a verified provider email — unsafe here for the reason above. Storing `state` in
 a signed cookie instead of Redis — self-contained means replayable, and the
 callback URL would work twice.
+
+---
+
+## ADR-018 — Fuel: consumption on read, and where the station comes from
+
+**Context.** Phase 5 adds fuel entries and the full-to-full consumption rule of
+ADR-012. Two things needed deciding that the spec left open: where consumption
+is computed, and how the fill-up form fills itself in — Skander asked for a form
+that is mostly defaults and one-tap choices, with the station taken from where
+the phone is.
+
+**Decision — consumption.** A pure function (`fuel/domain/consumption.ts`) over
+the vehicle's whole fill history, in integer centilitres and millimes, run on
+every read. Nothing is stored: a corrected or deleted fill changes every window
+after it, and a stored figure would need re-deriving on every write. A period's
+average is Σ litres ÷ Σ distance over its windows, never the mean of their
+figures, so a 60 km top-up window does not outvote a 900 km run.
+
+**Decision — the station.** In order: stations this vehicle has logged within
+300 m (matched by the API, so nothing leaves CarCare), then OpenStreetMap's
+Overpass API, called **from the browser**, with coordinates rounded to four
+places (about 11 m). The API never receives a location it is not asked to
+store, and it stores one only on an entry dated today — a fill logged a day
+later did not happen where the phone is now. Chosen over Google Places, which
+needs a billed key and sends coordinates to Google, and over history alone,
+which makes every new station a typing exercise.
+
+**Decision — the price.** Volume and total are required; price per litre is
+optional and derived. A stated price more than 2% off total ÷ volume is refused
+with the figure it should be: pump rounding is far below 2%, and the common
+typos (a slipped decimal, the diesel price on a petrol fill) are far above it.
+
+**Consequences.** Every list and consumption read loads the vehicle's full fill
+history — about fifty narrow rows a year, served by `(vehicleId, odometerKm)`.
+If a vehicle ever holds tens of thousands, the window grouping moves into SQL
+(a running count of full tanks as the group key) behind the same function
+signature. OSM coverage of station names varies; the chips and the text field
+cover the gaps, and every saved entry teaches the history match.
+
+**Also found.** Inserting a record before `OdometerService.recordIn` locked the
+vehicle let two concurrent writes deadlock: each insert takes `FOR KEY SHARE`
+on the vehicle for its foreign key, then both wait for `FOR UPDATE`. Callers now
+take the lock first (`lockVehicleFor`). Phase 4's expense create had the same
+latent bug for expenses carrying a mileage.

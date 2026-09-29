@@ -10,8 +10,8 @@ a working, tested state. Status is updated as phases land.
 | 3     | **Vehicles** — CRUD, `VehicleMember` access control, odometer timeline                                                    | ✅ Done |
 | 4     | **Expenses** — the cost ledger, categories, filtering, pagination                                                         | ✅ Done |
 | 4b    | **Expense attachments** — optional receipt/invoice photo or PDF on an expense (pulled forward from Phase 8; no OCR)       | ✅ Done |
-| 5     | **Fuel** — entries, full-to-full consumption engine, fuel analytics                                                       | ⬜ Next |
-| 6     | **Maintenance** — records, schedules, due/overdue engine                                                                  | ⬜      |
+| 5     | **Fuel** — entries, full-to-full consumption engine, fuel analytics                                                       | ✅ Done |
+| 6     | **Maintenance** — records, schedules, due/overdue engine                                                                  | ⬜ Next |
 | 7     | **Reminders & jobs** — BullMQ queues, worker role, notifications                                                          | ⬜      |
 | 8     | **Documents** — expiry tracking, vehicle-level documents (upload/download landed in 4b)                                   | ⬜      |
 | 9     | **Analytics** — dashboard, charts, cost/km, total cost of ownership                                                       | ⬜      |
@@ -274,6 +274,57 @@ the receipt or invoice on any expense. Attach only; nothing reads the files.
 
 **Not built:** a sweep for uploads never confirmed (Phase 7's job queue), and
 thumbnails.
+
+## Phase 5 — delivered
+
+**Backend**
+
+- `FuelEntry` with the specified indexes and CHECKs, plus positive price and
+  total and "both coordinates or neither". Nullable `latitude`/`longitude` exist
+  only to recognise a station on the next visit.
+- A fill is three rows in one transaction: the entry, its ledger expense
+  (category and source `FUEL`, "38.20 L petrol · Shell Lac 2") and its `FUEL`
+  odometer reading. Editing moves all three; deleting removes them and purges
+  receipts after commit. The ledger's 409 on derived rows, built in Phase 4, is
+  now exercised for real.
+- The full-to-full engine (ADR-012, ADR-018): a pure function in integer
+  centilitres and millimes. Partial fills count toward their window, a missed
+  fill abandons it, zero distance is "not enough data". Each full tank in the
+  log carries its own window; `/analytics/consumption` sums a period by
+  distance.
+- Price per litre is derived when absent and refused when it contradicts total
+  ÷ volume by more than 2%, with the message naming the right figure.
+- `GET /vehicles/:id/fuel/suggestions` — what the form can prefill: the car's
+  fuel, the last price per fuel type, stations logged within 300 m, recent
+  stations and habitual whole amounts.
+- 31 unit tests and a 29-test integration suite.
+
+**Frontend**
+
+- `/vehicles/:id/fuel`: economy panel (average, spend, price, cost per km, a
+  per-tank trend line) and the fuel log with filters, edit, delete and receipts.
+  A fuel card on the vehicle page.
+- The form is built for a phone at the pump. Today, the car's fuel, the last
+  price paid and a full tank are preselected; the station comes from the
+  phone's location — history first, then OpenStreetMap from the browser, rounded
+  to ~11 m; usual amounts and recent stations are chips. Litres and total are
+  tied by the price, so either gives the other, and typing both lets the server
+  derive the price instead. The mileage is shown as a hint, never guessed.
+
+**Fixed during verification.**
+
+- **Concurrent writes with a mileage deadlocked.** Five simultaneous submits of
+  one fill returned three 500s. The insert took `FOR KEY SHARE` on the vehicle
+  before the reading asked for `FOR UPDATE`. Phase 4's expense create had the
+  same bug for expenses with a mileage — its race test never sent one. The lock
+  is now taken first, and a test for each fails without the fix.
+- **The price default skipped the calculation.** A last-price suggestion that
+  arrived after litres were typed left the total blank; defaults now go through
+  the same derivation as typed values.
+
+**Not built:** unusual-consumption notifications (Phase 7), electric charging
+in kWh, and fuel stations shared across a user's vehicles — the history match
+is per vehicle, because that is the scope authorisation checks.
 
 ## Deferred by design
 

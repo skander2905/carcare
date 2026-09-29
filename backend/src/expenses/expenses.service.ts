@@ -80,6 +80,11 @@ export class ExpensesService {
 
     try {
       const expense = await this.prisma.$transaction(async (tx) => {
+        // Before the insert, when a reading will follow — see
+        // OdometerService.lockVehicleFor. Without it, two expenses with a
+        // mileage submitted at once deadlock and both fail.
+        if (dto.odometerKm !== undefined) await this.odometer.lockVehicleFor(tx, vehicleId);
+
         const created = await this.expenses.create(tx, {
           vehicleId,
           createdById: userId,

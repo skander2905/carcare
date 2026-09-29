@@ -96,6 +96,20 @@ export class OdometerService {
   }
 
   /**
+   * Takes the vehicle's write lock now, before the caller inserts anything.
+   *
+   * A caller that inserts its own record first — an expense, a fuel entry —
+   * has Postgres take a `FOR KEY SHARE` lock on the vehicle row to check the
+   * foreign key. Two such transactions then each hold that shared lock while
+   * `recordIn` waits on the other for `FOR UPDATE`: a deadlock, and both
+   * submits fail. Locking first makes the second transaction wait at the
+   * door instead. `recordIn` re-locking afterwards is a no-op.
+   */
+  async lockVehicleFor(tx: Prisma.TransactionClient, vehicleId: string): Promise<void> {
+    await this.readings.lockVehicle(tx, vehicleId);
+  }
+
+  /**
    * Withdraws the readings a record produced — when an expense is deleted, or
    * its mileage or date changes and the reading has to move.
    *

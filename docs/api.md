@@ -129,6 +129,8 @@ DELETE /expenses/:id
 
 GET    /vehicles/:id/fuel              ?from=&to=&fuelType=&station=&page=&limit=
 POST   /vehicles/:id/fuel
+GET    /vehicles/:id/fuel/suggestions  ?lat=&lng=     -> form defaults, stations logged nearby
+GET    /fuel/:id
 PATCH  /fuel/:id
 DELETE /fuel/:id
 

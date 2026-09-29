@@ -22,6 +22,7 @@ import {
   defaultPumpFuel,
   formatDistance,
 } from '@/lib/fuel/format';
+import { defaultPrice, officialPricesNeedChecking } from '@/lib/fuel/price-source';
 import { litresFor, normaliseDecimal, priceFor, totalFor } from '@/lib/fuel/pump-math';
 import { type CreateFuelInput, type FuelEntry, type UpdateFuelInput } from '@/lib/fuel/types';
 import { formatKm, formatMoney, fuelLabel } from '@/lib/vehicles/format';
@@ -63,7 +64,7 @@ function validate(values: Values, typed: Typed): Errors {
   if (!normaliseDecimal(values.total, 3)) errors.total = 'A positive amount, up to 3 decimal places';
   // With both figures typed, the price is worked out from them and not needed.
   if (!(typed.litres && typed.total) && !normaliseDecimal(values.price, 3)) {
-    errors.price = 'Enter the price per litre, or both litres and total';
+    errors.price = 'Enter the price per litre, or both the amount paid and the litres';
   }
   return errors;
 }
@@ -114,6 +115,9 @@ export function FuelForm({ vehicleId, vehicleFuelType, currency, entry, onDone }
   const [typed, setTyped] = useState<Typed>({ litres: Boolean(entry), total: Boolean(entry) });
   // Set once the person chooses a price or station, so a late suggestion never overwrites them.
   const [touched, setTouched] = useState({ price: Boolean(entry), station: Boolean(entry) });
+  // The official grade chosen (by hand, or matched from history); null lets the default pick.
+  const [grade, setGrade] = useState<string | null>(null);
+  const [editingPrice, setEditingPrice] = useState(Boolean(entry));
 
   const suggestions = useQuery({
     queryKey: fuelKeys.suggestions(vehicleId, null),
@@ -141,10 +145,10 @@ export function FuelForm({ vehicleId, vehicleFuelType, currency, entry, onDone }
    * than in an effect, and only to fields nobody has touched, so they fill in
    * the blanks without ever fighting the person's own input.
    */
-  const suggestedPrice = suggestions.data?.lastPrices[values.fuelType];
-  if (!touched.price && suggestedPrice && values.price !== suggestedPrice) {
-    // Through `derive`, so litres typed before the suggestion arrived get their total.
-    setValues((current) => derive({ ...current, price: suggestedPrice }, typed));
+  const priceChoice = defaultPrice(values.fuelType, suggestions.data, grade);
+  if (!touched.price && priceChoice && values.price !== priceChoice.price) {
+    // Through `derive`, so an amount typed before the prices arrived gets its litres.
+    setValues((current) => derive({ ...current, price: priceChoice.price }, typed));
   }
   const located = finder.candidates[0];
   if (!touched.station && located && values.stationName === '') {
@@ -163,8 +167,16 @@ export function FuelForm({ vehicleId, vehicleFuelType, currency, entry, onDone }
   };
 
   const chooseFuel = (fuelType: FuelType) => {
-    const price = touched.price ? values.price : (suggestions.data?.lastPrices[fuelType] ?? values.price);
-    setValues((current) => derive({ ...current, fuelType, price }, typed));
+    // The price follows on the next render, from that fuel's official grade.
+    setGrade(null);
+    set({ fuelType });
+  };
+
+  const chooseGrade = (next: string) => {
+    // Picking a grade is choosing its official price, even after a hand edit.
+    setGrade(next);
+    setTouched((t) => ({ ...t, price: false }));
+    setEditingPrice(false);
   };
 
   const chooseAmount = (amount: string) => {
@@ -264,6 +276,19 @@ export function FuelForm({ vehicleId, vehicleFuelType, currency, entry, onDone }
   const gapKm = lastFill && values.odometerKm ? Number(values.odometerKm) - lastFill.odometerKm : null;
   const pumpFuels = PUMP_FUELS.includes(values.fuelType) ? PUMP_FUELS : [values.fuelType, ...PUMP_FUELS];
 
+  const grades = hints?.officialPrices?.prices[values.fuelType] ?? [];
+  const usingDefault = !touched.price && priceChoice !== null && values.price === priceChoice.price;
+  const priceSource = usingDefault
+    ? priceChoice.source === 'official'
+      ? `Official price${priceChoice.grade ? `, ${priceChoice.grade}` : ''}`
+      : 'Last price you paid'
+    : 'Your price';
+  const checkPump =
+    usingDefault &&
+    priceChoice.source === 'official' &&
+    hints?.officialPrices &&
+    officialPricesNeedChecking(hints.officialPrices.verifiedAt);
+
   const recent = (hints?.recentStations ?? []).filter(
     (name) => !finder.candidates.some((c) => c.name.toLowerCase() === name.toLowerCase()),
   );
@@ -280,6 +305,21 @@ export function FuelForm({ vehicleId, vehicleFuelType, currency, entry, onDone }
             </ChoiceChip>
           ))}
         </div>
+        {grades.length > 1 ? (
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Grade">
+            {grades.map((option) => (
+              <ChoiceChip
+                key={option.grade}
+                className="min-h-8 text-xs"
+                selected={usingDefault && priceChoice?.grade === option.grade}
+                onClick={() => chooseGrade(option.grade)}
+              >
+                {option.grade}
+                <span className="opacity-70">{option.pricePerLiter}</span>
+              </ChoiceChip>
+            ))}
+          </div>
+        ) : null}
       </fieldset>
 
       {/* Station: from where the phone is, then from history. */}
@@ -324,67 +364,97 @@ export function FuelForm({ vehicleId, vehicleFuelType, currency, entry, onDone }
         ) : null}
       </div>
 
-      {/* The three pump figures. */}
+      {/*
+       * The pump figures. Amount paid comes first because it is what someone
+       * asks the attendant for; the litres follow from the price. Either can
+       * be typed, and typing both — straight off the pump display — lets the
+       * server work out the price instead.
+       */}
       <div className="space-y-3">
+        <FormField
+          id={id('total')}
+          label={`Amount paid (${currency})`}
+          inputMode="decimal"
+          placeholder="50"
+          autoComplete="off"
+          className="h-11 text-lg"
+          value={values.total}
+          error={errors.total}
+          hint={!typed.total && values.total ? 'Worked out from the litres' : undefined}
+          onChange={(event) => typeFigure('total', event.target.value)}
+        />
         {hints?.usualAmounts.length ? (
-          <div className="space-y-2">
-            <p className="text-muted-foreground text-xs">Your usual amounts</p>
-            <div className="flex flex-wrap gap-2">
-              {hints.usualAmounts.map((amount) => (
-                <ChoiceChip
-                  key={amount}
-                  selected={values.total === amount && !typed.litres}
-                  onClick={() => chooseAmount(amount)}
-                >
-                  {formatMoney(amount, currency)}
-                </ChoiceChip>
-              ))}
-            </div>
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Your usual amounts">
+            {hints.usualAmounts.map((amount) => (
+              <ChoiceChip
+                key={amount}
+                selected={values.total === amount && !typed.litres}
+                onClick={() => chooseAmount(amount)}
+              >
+                {formatMoney(amount, currency)}
+              </ChoiceChip>
+            ))}
           </div>
         ) : null}
 
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           <FormField
             id={id('litres')}
             label="Litres"
             inputMode="decimal"
-            placeholder="38.20"
+            placeholder="19.80"
             autoComplete="off"
             value={values.litres}
             error={errors.litres}
-            hint={!typed.litres && values.litres ? 'Worked out' : undefined}
+            hint={
+              !typed.litres && values.litres
+                ? 'Worked out. Correct it if the pump shows different.'
+                : undefined
+            }
             onChange={(event) => typeFigure('litres', event.target.value)}
           />
-          <FormField
-            id={id('total')}
-            label={`Total (${currency})`}
-            inputMode="decimal"
-            placeholder="96.455"
-            autoComplete="off"
-            value={values.total}
-            error={errors.total}
-            hint={!typed.total && values.total ? 'Worked out' : undefined}
-            onChange={(event) => typeFigure('total', event.target.value)}
-          />
-          <FormField
-            id={id('price')}
-            label="Price / litre"
-            inputMode="decimal"
-            placeholder="2.525"
-            autoComplete="off"
-            className="col-span-2 sm:col-span-1"
-            disabled={bothTyped}
-            value={bothTyped ? (workedOutPrice ?? '') : values.price}
-            error={errors.price}
-            hint={
-              bothTyped
-                ? 'Worked out from litres and total'
-                : suggestedPrice && values.price === suggestedPrice
-                  ? 'Last price you paid'
-                  : undefined
-            }
-            onChange={(event) => setPrice(event.target.value)}
-          />
+
+          {bothTyped ? (
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Price / litre</p>
+              <p className="text-sm tabular-nums">
+                {workedOutPrice ? `${formatMoney(workedOutPrice, currency)}/L` : '—'}
+              </p>
+              <p className="text-muted-foreground text-sm">Worked out from the amount and litres</p>
+            </div>
+          ) : editingPrice || !values.price ? (
+            <FormField
+              id={id('price')}
+              label="Price / litre"
+              inputMode="decimal"
+              placeholder="2.525"
+              autoComplete="off"
+              value={values.price}
+              error={errors.price}
+              hint={values.price ? priceSource : undefined}
+              onChange={(event) => setPrice(event.target.value)}
+            />
+          ) : (
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Price / litre</p>
+              <p className="flex flex-wrap items-baseline gap-x-2 text-sm">
+                <span className="tabular-nums">{formatMoney(values.price, currency)}/L</span>
+                <Button
+                  type="button"
+                  variant="link"
+                  size="sm"
+                  className="h-auto px-0"
+                  onClick={() => setEditingPrice(true)}
+                >
+                  Change
+                </Button>
+              </p>
+              <p className="text-muted-foreground text-sm">
+                {priceSource}
+                {checkPump ? ' · last checked a while ago, so glance at the pump' : null}
+              </p>
+            </div>
+          )}
         </div>
       </div>
 

@@ -37,6 +37,11 @@ interface ExpenseBody {
   incurredAt: string;
 }
 
+interface OfficialBody {
+  effectiveFrom: string;
+  prices: Record<string, { grade: string; pricePerLiter: string }[] | undefined>;
+}
+
 interface ReadingBody {
   odometerKm: number;
   source: string;
@@ -400,6 +405,21 @@ describe('Fuel (e2e)', () => {
     it('works for a vehicle with no fills', async () => {
       const { body } = await me().get(`/vehicles/${vehicleId}/fuel/suggestions`).expect(200);
       expect(body).toMatchObject({ lastFill: null, lastPrices: {}, nearbyStations: [], usualAmounts: [] });
+    });
+
+    it("offers the state's pump prices, exact, for a vehicle priced in dinars", async () => {
+      const { body } = await me().get(`/vehicles/${vehicleId}/fuel/suggestions`).expect(200);
+      const official = (body as { officialPrices: OfficialBody }).officialPrices;
+
+      expect(official.effectiveFrom).toBe('2022-11-24');
+      expect(official.prices.PETROL?.[0]).toEqual({ grade: 'Sans plomb', pricePerLiter: '2.525' });
+      expect(official.prices.DIESEL?.map((g) => g.grade)).toContain('Gasoil ordinaire');
+    });
+
+    it('offers none when the owner counts in another currency', async () => {
+      await me().patch('/users/me').send({ currency: 'EUR' }).expect(200);
+      const { body } = await me().get(`/vehicles/${vehicleId}/fuel/suggestions`).expect(200);
+      expect(body.officialPrices).toBeNull();
     });
   });
 

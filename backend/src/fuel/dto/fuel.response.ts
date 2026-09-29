@@ -225,6 +225,31 @@ export class LastFillResponse {
   odometerKm: number;
 }
 
+export class OfficialGradeResponse {
+  @ApiProperty({ example: 'Sans plomb' })
+  grade: string;
+
+  @ApiProperty({ example: '2.525' })
+  pricePerLiter: string;
+}
+
+export class OfficialPricesResponse {
+  @ApiProperty({ example: '2022-11-24' })
+  effectiveFrom: string;
+
+  @ApiProperty({ example: '2026-09-29', description: 'When the table was last confirmed current.' })
+  verifiedAt: string;
+
+  @ApiProperty()
+  source: string;
+
+  @ApiProperty({
+    example: { PETROL: [{ grade: 'Sans plomb', pricePerLiter: '2.525' }] },
+    description: "Per fuel type, the pump's usual grade first.",
+  })
+  prices: Partial<Record<string, OfficialGradeResponse[]>>;
+}
+
 export class FuelSuggestionsResponse {
   @ApiProperty({ enum: FuelType, description: "The vehicle's own fuel type." })
   fuelType: FuelType;
@@ -257,6 +282,13 @@ export class FuelSuggestionsResponse {
     description: 'Whole amounts paid at least twice.',
   })
   usualAmounts: string[];
+
+  @ApiPropertyOptional({
+    type: OfficialPricesResponse,
+    nullable: true,
+    description: 'State-set pump prices in force today; null where none apply.',
+  })
+  officialPrices: OfficialPricesResponse | null;
 }
 
 export function toSuggestionsResponse(suggestions: FuelSuggestions): FuelSuggestionsResponse {
@@ -272,5 +304,21 @@ export function toSuggestionsResponse(suggestions: FuelSuggestions): FuelSuggest
     nearbyStations: suggestions.nearbyStations,
     recentStations: suggestions.recentStations,
     usualAmounts: suggestions.usualAmountsMillimes.map((millimes) => fromUnits(millimes, 3)),
+    officialPrices: suggestions.officialPrices
+      ? {
+          effectiveFrom: suggestions.officialPrices.effectiveFrom,
+          verifiedAt: suggestions.officialPrices.verifiedAt,
+          source: suggestions.officialPrices.source,
+          prices: Object.fromEntries(
+            Object.entries(suggestions.officialPrices.prices).map(([fuel, grades]) => [
+              fuel,
+              grades.map(({ grade, priceMillimes }) => ({
+                grade,
+                pricePerLiter: fromUnits(priceMillimes, 3),
+              })),
+            ]),
+          ),
+        }
+      : null,
   };
 }

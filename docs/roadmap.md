@@ -295,21 +295,24 @@ thumbnails.
 - Price per litre is derived when absent and refused when it contradicts total
   ÷ volume by more than 2%, with the message naming the right figure.
 - `GET /vehicles/:id/fuel/suggestions` — what the form can prefill: the car's
-  fuel, the last price per fuel type, stations logged within 300 m, recent
+  fuel, Tunisia's official pump prices per grade (exact, with their effective
+  date), the last price per fuel type, stations logged within 300 m, recent
   stations and habitual whole amounts.
-- 31 unit tests and a 29-test integration suite.
+- 26 unit tests and a 30-test integration suite.
 
 **Frontend**
 
 - `/vehicles/:id/fuel`: economy panel (average, spend, price, cost per km, a
   per-tank trend line) and the fuel log with filters, edit, delete and receipts.
   A fuel card on the vehicle page.
-- The form is built for a phone at the pump. Today, the car's fuel, the last
-  price paid and a full tank are preselected; the station comes from the
-  phone's location — history first, then OpenStreetMap from the browser, rounded
-  to ~11 m; usual amounts and recent stations are chips. Litres and total are
-  tied by the price, so either gives the other, and typing both lets the server
-  derive the price instead. The mileage is shown as a hint, never guessed.
+- The form is built for a phone at the pump: type the amount paid, and the
+  litres follow from the official price for the grade (preselected from what the
+  car last took; diesel's three grades are chips). Today, the car's fuel and a
+  full tank are preselected; the station comes from the phone's location —
+  history first, then OpenStreetMap from the browser, rounded to ~11 m; usual
+  amounts and recent stations are chips. Typing litres instead also works, and
+  typing both lets the server derive the price. The mileage is shown as a hint,
+  never guessed. 17 unit tests.
 
 **Fixed during verification.**
 

@@ -459,10 +459,25 @@ later did not happen where the phone is now. Chosen over Google Places, which
 needs a billed key and sends coordinates to Google, and over history alone,
 which makes every new station a typing exercise.
 
-**Decision — the price.** Volume and total are required; price per litre is
-optional and derived. A stated price more than 2% off total ÷ volume is refused
-with the figure it should be: pump rounding is far below 2%, and the common
-typos (a slipped decimal, the diesel price on a petrol fill) are far above it.
+**Decision — the price.** Someone at the pump types what they paid; the litres
+follow from the price per litre, which the form already knows. For a vehicle in
+dinars that is the state's price: Tunisia sets pump prices nationally, and
+`fuel/domain/official-prices.ts` holds them exactly, per grade (sans plomb 2.525,
+gasoil sans soufre 2.205, gasoil ordinaire 1.985 …), with the day they took
+effect and the day someone last confirmed them. Elsewhere, or for LPG, whose
+exact price neither source states, the last price paid stands in.
+
+A live feed was rejected: GlobalPetrolPrices has an API, but it is paid and
+rounds to two places (2.53 for 2.525), which puts every litres figure worked out
+from an amount 0.2% off; the free sources are scraped pages with the same
+rounding. A price the state fixes to the millime is better copied exactly than
+fetched approximately. When prices change, a new list is appended — old lists
+stay, for backdated entries — and the form nudges "glance at the pump" once the
+table has gone six months unconfirmed.
+
+The server still refuses a stated price more than 2% off total ÷ volume, with
+the figure it should be: pump rounding is far below 2%, and the common typos (a
+slipped decimal, the diesel price on a petrol fill) are far above it.
 
 **Consequences.** Every list and consumption read loads the vehicle's full fill
 history — about fifty narrow rows a year, served by `(vehicleId, odometerKm)`.

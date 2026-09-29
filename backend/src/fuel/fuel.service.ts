@@ -28,6 +28,7 @@ import {
   recentStations,
   usualAmounts,
 } from './domain/suggestions.js';
+import { type OfficialPrices, officialPricesOn } from './domain/official-prices.js';
 import { derivePriceMillimes, fromUnits, priceIsConsistent, toUnits } from './domain/units.js';
 import {
   type CreateFuelEntryDto,
@@ -71,6 +72,8 @@ export interface FuelSuggestions {
   nearbyStations: NearbyStation[];
   recentStations: string[];
   usualAmountsMillimes: number[];
+  /** State-set pump prices in force today, or null where none apply. */
+  officialPrices: OfficialPrices | null;
 }
 
 /** The resolved figures of an entry, whether it is being created or edited. */
@@ -313,7 +316,7 @@ export class FuelService {
     const [vehicle, history] = await Promise.all([
       this.prisma.vehicle.findUniqueOrThrow({
         where: { id: vehicleId },
-        select: { fuelType: true, currentOdometerKm: true },
+        select: { fuelType: true, currentOdometerKm: true, owner: { select: { currency: true } } },
       }),
       this.fuel.history(vehicleId),
     ]);
@@ -339,6 +342,8 @@ export class FuelService {
       nearbyStations: lat !== undefined && lng !== undefined ? nearbyStations(past, lat, lng) : [],
       recentStations: recentStations(past),
       usualAmountsMillimes: usualAmounts(past),
+      // In the owner's currency, like every amount on the vehicle (ADR-016).
+      officialPrices: officialPricesOn(vehicle.owner.currency, new Date()),
     };
   }
 

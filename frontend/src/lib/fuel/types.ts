@@ -102,4 +102,11 @@ export interface FuelSuggestions {
   nearbyStations: { name: string; distanceMeters: number }[];
   recentStations: string[];
   usualAmounts: string[];
+  /** State-set pump prices in force today; null where none apply (another currency). */
+  officialPrices: {
+    effectiveFrom: string;
+    verifiedAt: string;
+    source: string;
+    prices: Partial<Record<FuelType, { grade: string; pricePerLiter: string }[]>>;
+  } | null;
 }

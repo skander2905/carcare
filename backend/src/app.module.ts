@@ -4,6 +4,7 @@ import { LoggerModule } from 'nestjs-pino';
 import { AuthModule } from './auth/auth.module.js';
 import { DocumentsModule } from './documents/documents.module.js';
 import { ExpensesModule } from './expenses/expenses.module.js';
+import { FuelModule } from './fuel/fuel.module.js';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 import { buildLoggerOptions } from './common/logging/logger.options.js';
 import { RateLimitModule } from './common/rate-limit/rate-limit.module.js';
@@ -54,6 +55,7 @@ import { VehiclesModule } from './vehicles/vehicles.module.js';
     VehiclesModule,
     OdometerModule,
     ExpensesModule,
+    FuelModule,
     DocumentsModule,
   ],
   providers: [

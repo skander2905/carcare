@@ -11,8 +11,8 @@ a working, tested state. Status is updated as phases land.
 | 4     | **Expenses** — the cost ledger, categories, filtering, pagination                                                         | ✅ Done |
 | 4b    | **Expense attachments** — optional receipt/invoice photo or PDF on an expense (pulled forward from Phase 8; no OCR)       | ✅ Done |
 | 5     | **Fuel** — entries, full-to-full consumption engine, fuel analytics                                                       | ✅ Done |
-| 6     | **Maintenance** — records, schedules, due/overdue engine                                                                  | ⬜ Next |
-| 7     | **Reminders & jobs** — BullMQ queues, worker role, notifications                                                          | ⬜      |
+| 6     | **Maintenance** — records, schedules, due/overdue engine                                                                  | ✅ Done |
+| 7     | **Reminders & jobs** — BullMQ queues, worker role, notifications                                                          | ⬜ Next |
 | 8     | **Documents** — expiry tracking, vehicle-level documents (upload/download landed in 4b)                                   | ⬜      |
 | 9     | **Analytics** — dashboard, charts, cost/km, total cost of ownership                                                       | ⬜      |
 | 10    | **Trips** — trip log and estimated trip cost                                                                              | ⬜      |
@@ -328,6 +328,64 @@ thumbnails.
 **Not built:** unusual-consumption notifications (Phase 7), electric charging
 in kWh, and fuel stations shared across a user's vehicles — the history match
 is per vehicle, because that is the scope authorisation checks.
+
+## Phase 6 — delivered
+
+**Backend**
+
+- `MaintenanceRecord` and `MaintenanceSchedule` as specified, with hand-written
+  CHECKs: a schedule needs an interval, costs are non-negative, and a record has
+  an expense exactly when it cost something.
+- A service is logged like a fill-up: the record, its ledger expense and its
+  `MAINTENANCE` odometer reading in one transaction, vehicle locked first.
+  Tyres and inspections land under their own ledger categories; the rest under
+  maintenance.
+- **Free services** (ADR-019). A warranty service still resets its schedule,
+  but the ledger refuses zero, so it has no expense — and gains one if a cost
+  is added later, or loses it if edited to zero. That is refused with 409 while
+  receipts hang off the expense, rather than deleting them silently.
+- Parts, labour and total: any may be missing, a total can be added up from the
+  split, and a split that disagrees with the total by a millime is refused with
+  the sum named.
+- **The due engine** (`maintenance/domain/due.ts`), pure and run on every read:
+  every N km, every N months, or whichever comes first. `DUE_SOON` inside the
+  notify window, `DUE` from the due point until one window past it, then
+  `OVERDUE`; `UNKNOWN` with no service to count from, rather than counting from
+  0 km. Calendar dates in the owner's time zone, months clamped at month end.
+- The schedule's `lastService*` is a baseline that linked records supersede,
+  never overwrite, so deleting a record restores the schedule. Schedules list
+  most urgent first, paused last; deleting one keeps its records, unlinked.
+- The fuel module's exact unit maths moved to `common/money/units.ts`.
+- 33 unit tests (engine boundaries, month ends, leap years, the Tunis-vs-UTC
+  day) and a 30-test integration suite. Both the lock-first rule and the
+  record-to-schedule link were checked by breaking them: five simultaneous
+  submits then returned four 500s, and a logged service restarted nothing.
+
+**Frontend**
+
+- `/vehicles/:id/maintenance`: "What's due" with a status, a progress bar and
+  one line per schedule ("Due in 3,520 km or by 1 Mar 2027"), then the service
+  log with filters, edit, delete and invoices. A maintenance card on the
+  vehicle page with the three schedules closest to due.
+- Schedules from one-tap presets (oil and filter, technical inspection, filters,
+  pads, tyres, coolant, battery, timing belt) with typical intervals flagged as
+  "check your handbook"; "when was it last done" is optional.
+- A schedule's **Log it** opens the service form with the job and schedule
+  chosen; otherwise the one active schedule matching the job is preselected.
+  Total first, with a "Free · under warranty" chip and an optional parts/labour
+  split that adds itself up; recent workshops as chips; mileage a hint, never
+  prefilled. 11 unit tests.
+
+**Verified in the running app** against the dev database: a schedule created
+from a preset, a service logged through "Log it" with a split total, the
+schedule restarting from it, and falling back to its baseline when the service
+was deleted. The test rows were removed afterwards and the car's mileage checked
+unchanged.
+
+**Not built:** reminders and notifications when something falls due (Phase 7's
+job), predicting a km-based due _date_ from the car's pace, and a schedule
+satisfied by several job types at once (a full service covering oil, filters and
+plugs is one record against one schedule).
 
 ## Deferred by design
 

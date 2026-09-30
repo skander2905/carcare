@@ -491,3 +491,41 @@ vehicle let two concurrent writes deadlock: each insert takes `FOR KEY SHARE`
 on the vehicle for its foreign key, then both wait for `FOR UPDATE`. Callers now
 take the lock first (`lockVehicleFor`). Phase 4's expense create had the same
 latent bug for expenses carrying a mileage.
+
+## ADR-019 — Maintenance: derived status, baselines, and free services
+
+**Context.** Phase 6 adds service records and recurring schedules. The spec
+fixed the tables and said status is derived, not stored; it left open what
+"last serviced" means, what a schedule with no history reports, and how a
+service that cost nothing fits a ledger that refuses zero.
+
+**Decision — status.** A pure engine over the schedule's terms, its service
+history, the car's current mileage and the owner's today. Each tracked
+dimension is classified on its own and the more urgent wins: `UPCOMING`, then
+`DUE_SOON` within the notify window, `DUE` from the due point until one window
+past it, `OVERDUE` after. Dates are calendar dates in the owner's time zone
+(amounts are in the owner's currency, ADR-016); "12 months after 31 January" is
+the end of February. A schedule with no service to count from is `UNKNOWN`:
+counting from 0 km would show an oil change on a 120,000 km car as eleven
+intervals overdue.
+
+**Decision — baselines.** `lastServiceOdometerKm` / `lastServiceAt` hold what
+the owner remembered when setting the schedule up. Linked records are laid over
+the baseline — the latest mileage and the latest date among them all, taken per
+dimension — and never copied into it. Rejected: updating the columns when a
+record is logged, which is one query cheaper per read but leaves the schedule
+pointing at a service that no longer exists once that record is deleted or
+corrected, with nothing left to restore it from.
+
+**Decision — free services.** A warranty service or a dealer's free first
+inspection resets its schedule, so it must be loggable. The ledger's
+`amount > 0` rule stays — a zero row is noise in every cost report — and a free
+record has no expense instead: `expenseId` is nullable, and a CHECK ties it to
+`totalCost = 0` both ways. Editing a record across zero creates or deletes its
+expense in the same transaction; deleting one that holds receipts is refused
+with 409, since the receipts would go with it. Receipts attach to the expense,
+as for fuel, so `Document.maintenanceRecordId` was dropped from the plan.
+
+**Consequences.** Every schedule read costs one indexed query for its records;
+a schedule is serviced once or twice a year, so this is a handful of rows.
+Reminders (Phase 7) will call the same engine rather than duplicate it.

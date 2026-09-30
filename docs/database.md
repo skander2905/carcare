@@ -169,16 +169,29 @@ module.
 
 ### MaintenanceRecord — _Phase 6_
 
-`id`, `vehicleId`, `createdById`, `expenseId` (unique), `scheduleId?`, `type`,
-`performedAt`, `odometerKm`, `partsCost`, `laborCost`, `totalCost`,
+`id`, `vehicleId`, `createdById`, `expenseId?` (unique), `scheduleId?`, `type`,
+`performedAt`, `odometerKm`, `partsCost?`, `laborCost?`, `totalCost`,
 `serviceProvider?`, `description?`, `notes?`, timestamps.
-Index: `(vehicleId, performedAt DESC)`, `(vehicleId, type, performedAt DESC)`.
+Index: `(vehicleId, performedAt DESC)`, `(vehicleId, type, performedAt DESC)`,
+`(scheduleId, performedAt)`.
+
+`expenseId` is null exactly when `totalCost` is zero — a free service (warranty,
+a dealer's first inspection) still resets its schedule, but the ledger refuses a
+zero amount. A CHECK enforces the pairing both ways (ADR-019). Parts and labour
+are optional because most invoices show only a total; when both are given they
+must add up to it exactly. Receipts attach to the expense, as for fuel, so a
+free record has none.
 
 ### MaintenanceSchedule — _Phase 6_
 
 `id`, `vehicleId`, `type`, `name`, `intervalKm?`, `intervalMonths?`,
 `lastServiceOdometerKm?`, `lastServiceAt?`, `notifyBeforeKm`, `notifyBeforeDays`,
 `isActive`, timestamps.
+
+`lastServiceOdometerKm` / `lastServiceAt` are a **baseline** — the last service
+before it was logged here. The due engine takes the latest of the baseline and
+every record linked to the schedule, per dimension, and never writes a record
+back into the baseline, so deleting a record restores the schedule (ADR-019).
 
 Check constraint: `intervalKm IS NOT NULL OR intervalMonths IS NOT NULL` — a
 schedule with neither interval can never become due, so the database rejects it
@@ -212,7 +225,8 @@ overlapping workers are safe by construction rather than by careful timing.
 
 `id`, `vehicleId`, `uploadedById`, `type`, `title`, `fileName`, `mimeType`,
 `sizeBytes`, `storageKey` (unique), `checksum?`, `status`, `issuedAt?`,
-`expiresAt?`, `expenseId?`, `maintenanceRecordId?`, timestamps.
+`expiresAt?`, `expenseId?`, timestamps. (`maintenanceRecordId` was dropped from the plan:
+a maintenance invoice attaches to the record's expense, like a fuel receipt.)
 
 Index: `(vehicleId, type)`, `(vehicleId, expiresAt)`.
 
@@ -249,7 +263,7 @@ price. Storing it would freeze a number that should move as better data arrives.
 | `TripPurpose`      | `PERSONAL`, `WORK`, `VACATION`, `OTHER`                                                                                                                                    |
 | `NotificationType` | `MAINTENANCE_DUE`, `DOCUMENT_EXPIRING`, `REMINDER_DUE`, `UNUSUAL_CONSUMPTION`, `COST_MILESTONE`                                                                            |
 
-`MaintenanceStatus` (`UPCOMING`, `DUE_SOON`, `DUE`, `OVERDUE`) is deliberately
+`MaintenanceStatus` (`UNKNOWN`, `UPCOMING`, `DUE_SOON`, `DUE`, `OVERDUE`) is deliberately
 **not** stored. It is derived from current mileage and today's date, so a stored
 copy would be stale the moment either changes.
 

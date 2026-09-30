@@ -54,6 +54,7 @@ model User {
   idempotencyKeys IdempotencyKey[]
   documents       Document[]
   fuelEntries     FuelEntry[]
+  maintenance     MaintenanceRecord[]
 
   @@map("users")
 }
@@ -220,6 +221,8 @@ model Vehicle {
   expenses         Expense[]
   documents        Document[]
   fuelEntries      FuelEntry[]
+  maintenance      MaintenanceRecord[]
+  schedules        MaintenanceSchedule[]
 
   @@unique([ownerId, licensePlate])
   @@index([ownerId])
@@ -347,9 +350,11 @@ model Expense {
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
-  documents Document[]
+  documents         Document[]
   /// Set when a fuel entry owns this row (`sourceType = FUEL`).
-  fuelEntry FuelEntry?
+  fuelEntry         FuelEntry?
+  /// Set when a maintenance record owns this row (`sourceType = MAINTENANCE`).
+  maintenanceRecord MaintenanceRecord?
 
   /// `(vehicleId, incurredAt DESC)` serves the paginated ledger;
   /// `(vehicleId, category, incurredAt)` serves spend by category for a period.
@@ -500,7 +505,7 @@ model FuelEntry {
   /// is missing litres and must not produce a consumption figure.
   isMissedFill Boolean @default(false)
 
-  stationName String? @db.VarChar(120)
+  stationName String?  @db.VarChar(120)
   /// Where the fill happened, when the browser shared it. Used only to
   /// suggest this station the next time someone fills up nearby.
   latitude    Decimal? @db.Decimal(9, 6)
@@ -516,4 +521,120 @@ model FuelEntry {
   @@index([vehicleId, odometerKm])
   @@index([vehicleId, filledAt(sort: Desc)])
   @@map("fuel_entries")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 6 — maintenance
+// ---------------------------------------------------------------------------
+
+enum MaintenanceType {
+  OIL_CHANGE
+  OIL_FILTER
+  AIR_FILTER
+  CABIN_FILTER
+  BRAKE_PADS
+  BRAKE_DISCS
+  TIRES
+  BATTERY
+  COOLANT
+  TRANSMISSION
+  TIMING_BELT
+  INSPECTION
+  OTHER
+}
+
+/// A service that was carried out.
+///
+/// Owns its ledger expense like a fuel entry does (ADR-004), with one
+/// difference: a service can be free — a warranty service, a dealer's first
+/// inspection — and still reset its schedule. The ledger refuses a zero
+/// amount, so a free record simply has no expense (ADR-019).
+model MaintenanceRecord {
+  id        String  @id @default(uuid(7)) @db.Uuid
+  vehicleId String  @db.Uuid
+  vehicle   Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  /// Attribution, nullable for the same reason as `Expense.createdById`.
+  createdById String? @db.Uuid
+  createdBy   User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  /// The ledger row, absent exactly when `totalCost` is zero. The cascade
+  /// covers the vehicle being deleted underneath both.
+  expenseId String?  @unique @db.Uuid
+  expense   Expense? @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+
+  /// The schedule this service satisfies. Deleting the schedule keeps the
+  /// record — it still happened, and still cost what it cost.
+  scheduleId String?              @db.Uuid
+  schedule   MaintenanceSchedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+
+  type        MaintenanceType
+  performedAt DateTime        @db.Timestamptz(3)
+  /// Also a `MAINTENANCE` reading on the odometer timeline.
+  odometerKm  Int
+
+  /// Either split may be unknown — an invoice often shows only a total. When
+  /// both are known they add up to the total exactly; the service enforces it.
+  partsCost Decimal? @db.Decimal(12, 3)
+  laborCost Decimal? @db.Decimal(12, 3)
+  /// What was paid. Mirrored into `Expense.amount`; this is the source.
+  totalCost Decimal  @db.Decimal(12, 3)
+
+  serviceProvider String? @db.VarChar(120)
+  description     String? @db.VarChar(200)
+  notes           String? @db.Text
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  /// `(vehicleId, performedAt DESC)` serves the paginated log;
+  /// `(vehicleId, type, performedAt DESC)` the log filtered by type.
+  /// `(scheduleId, performedAt)` finds a schedule's last service.
+  @@index([vehicleId, performedAt(sort: Desc)])
+  @@index([vehicleId, type, performedAt(sort: Desc)])
+  @@index([scheduleId, performedAt])
+  @@map("maintenance_records")
+}
+
+/// A recurring service: "oil change every 10,000 km or 12 months".
+///
+/// Whether it is due is never stored — it depends on today's date and the
+/// vehicle's current mileage, so a stored copy would be stale the moment
+/// either moved. The due engine derives it on every read.
+model MaintenanceSchedule {
+  id        String  @id @default(uuid(7)) @db.Uuid
+  vehicleId String  @db.Uuid
+  vehicle   Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  type MaintenanceType
+  name String          @db.VarChar(120)
+
+  /// At least one is set; the migration adds the CHECK. Whichever comes
+  /// first makes the service due.
+  intervalKm     Int?
+  intervalMonths Int? @db.SmallInt
+
+  /// The last service *before CarCare knew about it* — what the owner
+  /// remembers when setting the schedule up. Records linked to the schedule
+  /// supersede it as they are logged, and deleting one falls back to it,
+  /// so it is never overwritten by a record (ADR-019).
+  lastServiceOdometerKm Int?
+  lastServiceAt         DateTime? @db.Timestamptz(3)
+
+  /// How early "due soon" starts, and how long past due "due" lasts before
+  /// it becomes "overdue".
+  notifyBeforeKm   Int @default(1000)
+  notifyBeforeDays Int @default(30) @db.SmallInt
+
+  /// A paused schedule keeps its history and still reports its status, but is
+  /// listed last and will never raise a reminder (Phase 7).
+  isActive Boolean @default(true)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  records MaintenanceRecord[]
+
+  @@index([vehicleId, isActive])
+  @@map("maintenance_schedules")
 }

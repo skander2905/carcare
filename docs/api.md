@@ -135,14 +135,17 @@ PATCH  /fuel/:id
 DELETE /fuel/:id
 
 GET    /vehicles/:id/maintenance       ?type=&from=&to=&provider=&page=&limit=
-POST   /vehicles/:id/maintenance
+POST   /vehicles/:id/maintenance                     (Idempotency-Key)
+GET    /vehicles/:id/maintenance/suggestions         -> recent workshops, mileage hint
+GET    /maintenance/:id
 PATCH  /maintenance/:id
 DELETE /maintenance/:id
 
-GET    /vehicles/:id/maintenance-schedules
+GET    /vehicles/:id/maintenance-schedules          -> each with its derived `due`, most urgent first
 POST   /vehicles/:id/maintenance-schedules
+GET    /maintenance-schedules/:id
 PATCH  /maintenance-schedules/:id
-DELETE /maintenance-schedules/:id
+DELETE /maintenance-schedules/:id                   (records are kept, unlinked)
 ```
 
 ### Reminders, documents, trips

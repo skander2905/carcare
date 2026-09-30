@@ -17,4 +17,6 @@ export type {
   IdempotencyKeyModel as IdempotencyKey,
   DocumentModel as Document,
   FuelEntryModel as FuelEntry,
+  MaintenanceRecordModel as MaintenanceRecord,
+  MaintenanceScheduleModel as MaintenanceSchedule,
 } from '../generated/prisma/models.js';

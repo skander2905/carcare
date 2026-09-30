@@ -11,6 +11,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { RecentExpenses } from '@/features/expenses/recent-expenses';
 import { FuelSummaryCard } from '@/features/fuel/fuel-summary-card';
+import { MaintenanceSummaryCard } from '@/features/maintenance/maintenance-summary-card';
 import { OdometerTimeline } from '@/features/vehicles/odometer-timeline';
 import { ApiError } from '@/lib/api/client';
 import { formatKm, formatMoney, vehicleSpec, vehicleTitle } from '@/lib/vehicles/format';
@@ -147,15 +148,13 @@ export default function VehicleDetailPage() {
         </CardContent>
       </Card>
 
+      <MaintenanceSummaryCard vehicleId={data.id} />
+
       <FuelSummaryCard vehicleId={data.id} currency={data.currency} />
 
       <RecentExpenses vehicleId={data.id} currency={data.currency} />
 
       <OdometerTimeline vehicleId={data.id} />
-
-      <p className="text-muted-foreground text-xs">
-        Maintenance schedules for this vehicle arrive in the next phase.
-      </p>
     </div>
   );
 }

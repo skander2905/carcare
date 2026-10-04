@@ -107,7 +107,7 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
-    environment:
+    environment: &backend-env
       NODE_ENV: ${NODE_ENV:-development}
       APP_ROLE: api
       PORT: 3001
@@ -144,8 +144,45 @@ services:
       S3_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-carcare}
       S3_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-carcare-dev-secret}
       S3_FORCE_PATH_STYLE: 'true'
+      # Reminder emails (Phase 7). Mailpit catches everything; nothing leaves the machine.
+      SMTP_HOST: ${SMTP_HOST:-mailpit}
+      SMTP_PORT: ${SMTP_PORT:-1025}
+      SMTP_SECURE: ${SMTP_SECURE:-false}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-CarCare <reminders@carcare.local>}
     ports:
       - '${BACKEND_PORT:-3001}:3001'
+
+  # The same image in its other role (architecture.md §2): drains the queues,
+  # runs the hourly reminder sweep, sends the email digests. No HTTP port.
+  worker:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: runtime
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      <<: *backend-env
+      APP_ROLE: worker
+    # The image's healthcheck probes HTTP, which a worker does not serve.
+    healthcheck:
+      disable: true
+
+  # Catches every email the worker sends. Web UI on :8025.
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - '${MAILPIT_SMTP_PORT:-1025}:1025'
+      - '${MAILPIT_UI_PORT:-8025}:8025'
 
   frontend:
     build:

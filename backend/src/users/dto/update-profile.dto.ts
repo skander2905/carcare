@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsIn, IsString, Length, Matches } from 'class-validator';
+import { IsBoolean, IsIn, IsString, Length, Matches } from 'class-validator';
 import { IsOptionalProperty } from '../../common/validation/optional.decorator.js';
 
 const trimmed = Transform(({ value }: { value: unknown }) =>
@@ -48,4 +48,12 @@ export class UpdateProfileDto {
     message: 'timezone must be an IANA time zone name, for example Africa/Tunis',
   })
   timezone?: string;
+
+  @ApiPropertyOptional({
+    example: true,
+    description: 'Email due reminders as well as showing them in the app.',
+  })
+  @IsOptionalProperty()
+  @IsBoolean()
+  emailNotifications?: boolean;
 }

@@ -6,6 +6,8 @@ import { DocumentsModule } from './documents/documents.module.js';
 import { ExpensesModule } from './expenses/expenses.module.js';
 import { FuelModule } from './fuel/fuel.module.js';
 import { MaintenanceModule } from './maintenance/maintenance.module.js';
+import { NotificationsModule } from './notifications/notifications.module.js';
+import { RemindersModule } from './reminders/reminders.module.js';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 import { buildLoggerOptions } from './common/logging/logger.options.js';
 import { RateLimitModule } from './common/rate-limit/rate-limit.module.js';
@@ -13,9 +15,11 @@ import { AppConfigModule } from './config/config.module.js';
 import { loggingConfig } from './config/configuration.js';
 import { type LoggingConfig } from './config/config.types.js';
 import { HealthModule } from './health/health.module.js';
+import { JobsModule } from './jobs/jobs.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { RedisModule } from './redis/redis.module.js';
 import { StorageModule } from './storage/storage.module.js';
+import { MailModule } from './notifications/mail/mail.module.js';
 import { OdometerModule } from './odometer/odometer.module.js';
 import { UsersModule } from './users/users.module.js';
 import { VehiclesModule } from './vehicles/vehicles.module.js';
@@ -44,6 +48,7 @@ import { VehiclesModule } from './vehicles/vehicles.module.js';
     PrismaModule,
     RedisModule,
     StorageModule,
+    MailModule,
     RateLimitModule,
 
     HealthModule,
@@ -58,6 +63,8 @@ import { VehiclesModule } from './vehicles/vehicles.module.js';
     ExpensesModule,
     FuelModule,
     MaintenanceModule,
+    RemindersModule,
+    NotificationsModule,
     DocumentsModule,
   ],
   providers: [
@@ -67,3 +74,11 @@ import { VehiclesModule } from './vehicles/vehicles.module.js';
   ],
 })
 export class AppModule {}
+
+/**
+ * The API's graph plus the worker's processors, for `APP_ROLE=worker` and
+ * `all`. Kept apart from `AppModule` so the API role — and every integration
+ * suite, which boots `AppModule` — never starts a queue or a schedule.
+ */
+@Module({ imports: [AppModule, JobsModule] })
+export class AppWithWorkerModule {}

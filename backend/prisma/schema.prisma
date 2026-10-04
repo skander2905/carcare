@@ -43,6 +43,14 @@ model User {
   locale   String @default("en") @db.VarChar(10)
   timezone String @default("Africa/Tunis") @db.VarChar(64)
 
+  /// Whether due reminders are also emailed. The in-app inbox always gets them.
+  emailNotifications Boolean @default(true)
+
+  /// When the person proved they read this address, by a link sent to it — or
+  /// at sign-up through a provider that had already checked it. Nothing is
+  /// emailed to an address until then: anyone can type someone else's.
+  emailVerifiedAt DateTime? @db.Timestamptz(3)
+
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
@@ -55,6 +63,9 @@ model User {
   documents       Document[]
   fuelEntries     FuelEntry[]
   maintenance     MaintenanceRecord[]
+  reminders       Reminder[]
+  notifications   Notification[]
+  emailTokens     EmailToken[]
 
   @@map("users")
 }
@@ -223,6 +234,8 @@ model Vehicle {
   fuelEntries      FuelEntry[]
   maintenance      MaintenanceRecord[]
   schedules        MaintenanceSchedule[]
+  reminders        Reminder[]
+  notifications    Notification[]
 
   @@unique([ownerId, licensePlate])
   @@index([ownerId])
@@ -637,4 +650,141 @@ model MaintenanceSchedule {
 
   @@index([vehicleId, isActive])
   @@map("maintenance_schedules")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 7 — reminders and notifications
+// ---------------------------------------------------------------------------
+
+enum ReminderType {
+  INSURANCE
+  ROAD_TAX
+  LOAN
+  WARRANTY
+  OTHER
+}
+
+enum ReminderStatus {
+  PENDING
+  COMPLETED
+}
+
+/// Something that falls due once, on a date or at a mileage: an insurance
+/// renewal, the annual road tax, the end of a warranty. Recurring *services*
+/// are maintenance schedules; this is for everything else.
+///
+/// Like a schedule, how close it is is derived on read, never stored. A
+/// reminder that repeats is completed and succeeded by a new row, so the one
+/// that was paid keeps its completion date.
+model Reminder {
+  id        String  @id @default(uuid(7)) @db.Uuid
+  vehicleId String  @db.Uuid
+  vehicle   Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  /// Attribution, nullable for the same reason as `Expense.createdById`.
+  createdById String? @db.Uuid
+  createdBy   User?   @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  type        ReminderType
+  title       String       @db.VarChar(120)
+  description String?      @db.VarChar(500)
+
+  /// At least one is set; the migration adds the CHECK. Whichever comes
+  /// first makes it due. A calendar date, not an instant: "the insurance
+  /// renews on 1 March" means the owner's 1 March.
+  dueDate       DateTime? @db.Date
+  dueOdometerKm Int?
+
+  notifyBeforeDays Int @default(30) @db.SmallInt
+  notifyBeforeKm   Int @default(1000)
+
+  /// Completing a repeating reminder creates the next one this many months
+  /// after the due date. Needs a due date to count from.
+  repeatEveryMonths Int? @db.SmallInt
+
+  status      ReminderStatus @default(PENDING)
+  completedAt DateTime?      @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  /// `(vehicleId, dueDate)` lists a vehicle's reminders. The sweep's partial
+  /// index on pending rows is hand-written in the migration.
+  @@index([vehicleId, dueDate])
+  @@map("reminders")
+}
+
+enum NotificationType {
+  MAINTENANCE_DUE
+  REMINDER_DUE
+}
+
+/// Whether a notification still owes an email. `SKIPPED` when the user has
+/// email turned off, or the server has no mail transport, when it is created.
+enum NotificationEmailStatus {
+  PENDING
+  SENT
+  SKIPPED
+}
+
+/// One message in a user's inbox.
+///
+/// `dedupeKey` is the idempotency mechanism: the sweep runs every hour and
+/// would otherwise say "oil change due soon" every hour. The unique
+/// constraint turns a repeated insert into a no-op, so job retries and
+/// overlapping workers are safe by construction rather than by timing.
+model Notification {
+  id     String @id @default(uuid(7)) @db.Uuid
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// A notification about a car goes with the car.
+  vehicleId String?  @db.Uuid
+  vehicle   Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  type  NotificationType
+  title String           @db.VarChar(200)
+  body  String           @db.Text
+  /// What the notification is about, for linking: ids and the status reached.
+  data  Json             @default("{}")
+
+  dedupeKey String @db.VarChar(200)
+
+  readAt      DateTime?               @db.Timestamptz(3)
+  emailStatus NotificationEmailStatus @default(PENDING)
+  emailedAt   DateTime?               @db.Timestamptz(3)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  /// The unread and unsent partial indexes are hand-written in the migration.
+  @@unique([userId, dedupeKey])
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("notifications")
+}
+
+enum EmailTokenPurpose {
+  VERIFY_EMAIL
+  RESET_PASSWORD
+}
+
+/// A single-use link sent by email: "confirm your address", "reset your password".
+///
+/// Stored as a SHA-256 hash, like refresh tokens, so a database leak yields no
+/// working links. `email` is the address it was sent to: if the account's
+/// address has changed since, the link no longer proves anything and is refused.
+model EmailToken {
+  id     String @id @default(uuid(7)) @db.Uuid
+  userId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  purpose   EmailTokenPurpose
+  tokenHash String            @unique @db.Char(64)
+  email     String            @db.VarChar(320)
+
+  expiresAt DateTime  @db.Timestamptz(3)
+  usedAt    DateTime? @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+
+  @@index([userId, purpose])
+  @@map("email_tokens")
 }

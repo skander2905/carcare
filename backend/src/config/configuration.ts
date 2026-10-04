@@ -98,6 +98,25 @@ export const storageConfig = registerAs('storage', () => {
   };
 });
 
+export const mailConfig = registerAs('mail', () => {
+  const env = loadEnv();
+  return {
+    enabled: env.SMTP_HOST !== undefined,
+    host: env.SMTP_HOST,
+    port: env.SMTP_PORT,
+    secure: env.SMTP_SECURE,
+    auth: env.SMTP_USER && env.SMTP_PASSWORD ? { user: env.SMTP_USER, pass: env.SMTP_PASSWORD } : undefined,
+    from: env.MAIL_FROM,
+    // Links in an email must be absolute. Most point at the web app; the
+    // one-click unsubscribe is posted by the mail client straight to the API.
+    webAppUrl: env.WEB_APP_URL.replace(/\/+$/, ''),
+    apiBaseUrl: `${env.API_PUBLIC_URL.replace(/\/+$/, '')}/${env.API_PREFIX}/v1`,
+    // Signs unsubscribe links. Derived from the access-token key rather than a
+    // new required secret; rotating that key retires old links, which is fine.
+    linkSigningKey: env.JWT_ACCESS_SECRET,
+  };
+});
+
 export const loggingConfig = registerAs('logging', () => {
   const env = loadEnv();
   return {
@@ -123,6 +142,7 @@ export const configNamespaces = [
   authConfig,
   oauthConfig,
   storageConfig,
+  mailConfig,
   loggingConfig,
   swaggerConfig,
 ];

@@ -33,6 +33,8 @@ function buildUser(overrides: Partial<User> = {}): User {
     currency: 'TND',
     locale: 'en',
     timezone: 'Africa/Tunis',
+    emailNotifications: true,
+    emailVerifiedAt: null,
     createdAt: new Date('2026-09-01T00:00:00.000Z'),
     updatedAt: new Date('2026-09-01T00:00:00.000Z'),
     ...overrides,

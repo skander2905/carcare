@@ -1,3 +1,6 @@
+import { AccountEmailController } from './account-email/account-email.controller.js';
+import { AccountEmailService } from './account-email/account-email.service.js';
+import { EmailTokenRepository } from './account-email/email-token.repository.js';
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtModule, type JwtSignOptions } from '@nestjs/jwt';
@@ -41,10 +44,12 @@ import { JwtStrategy } from './strategies/jwt.strategy.js';
       }),
     }),
   ],
-  controllers: [AuthController, OAuthController],
+  controllers: [AuthController, OAuthController, AccountEmailController],
   providers: [
     AuthService,
     RefreshTokenRepository,
+    AccountEmailService,
+    EmailTokenRepository,
     JwtStrategy,
 
     OAuthService,

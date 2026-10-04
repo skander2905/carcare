@@ -19,4 +19,7 @@ export type {
   FuelEntryModel as FuelEntry,
   MaintenanceRecordModel as MaintenanceRecord,
   MaintenanceScheduleModel as MaintenanceSchedule,
+  ReminderModel as Reminder,
+  NotificationModel as Notification,
+  EmailTokenModel as EmailToken,
 } from '../generated/prisma/models.js';

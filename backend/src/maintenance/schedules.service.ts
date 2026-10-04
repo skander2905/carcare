@@ -32,10 +32,13 @@ export class SchedulesService {
     private readonly records: MaintenanceRepository,
   ) {}
 
-  /** Active schedules first, most urgent first; paused ones after, in the same order. */
-  async list(vehicleId: string): Promise<ScheduleWithDue[]> {
+  /**
+   * Active schedules first, most urgent first; paused ones after, in the same order.
+   * `now` is a parameter so the reminder sweep can be tested at a fixed moment.
+   */
+  async list(vehicleId: string, now = new Date()): Promise<ScheduleWithDue[]> {
     const schedules = await this.schedules.listForVehicle(this.prisma, vehicleId);
-    const withDue = await this.withDue(this.prisma, vehicleId, schedules);
+    const withDue = await this.withDue(this.prisma, vehicleId, schedules, now);
     return withDue.sort(
       (a, b) => Number(b.schedule.isActive) - Number(a.schedule.isActive) || byUrgency(a.due, b.due),
     );
@@ -110,6 +113,7 @@ export class SchedulesService {
     client: PrismaLike,
     vehicleId: string,
     schedules: MaintenanceSchedule[],
+    now = new Date(),
   ): Promise<ScheduleWithDue[]> {
     const [vehicle, services] = await Promise.all([
       client.vehicle.findUniqueOrThrow({
@@ -122,8 +126,6 @@ export class SchedulesService {
         schedules.map((s) => s.id),
       ),
     ]);
-
-    const now = new Date();
 
     return schedules.map((schedule) => {
       const linked = services.filter((s) => s.scheduleId === schedule.id);

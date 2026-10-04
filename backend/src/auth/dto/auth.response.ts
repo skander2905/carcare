@@ -30,6 +30,15 @@ export class UserResponse {
   @ApiProperty({ example: 'Africa/Tunis' })
   timezone: string;
 
+  @ApiProperty({ example: true, description: 'Whether due reminders are also emailed.' })
+  emailNotifications: boolean;
+
+  @ApiProperty({
+    example: true,
+    description: 'Whether the address has been confirmed. Nothing is emailed until it is.',
+  })
+  emailVerified: boolean;
+
   @ApiProperty({ example: '2026-09-13T09:24:11.482Z' })
   createdAt: string;
 }

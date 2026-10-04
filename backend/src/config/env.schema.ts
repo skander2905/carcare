@@ -153,6 +153,19 @@ export const envSchema = z.object({
   /** MinIO serves buckets by path (`host/bucket/key`), not as subdomains. */
   S3_FORCE_PATH_STYLE: booleanFromEnv(false),
 
+  /**
+   * Outgoing email for reminders (Phase 7). Optional, like storage: without
+   * `SMTP_HOST` the API and worker boot, notifications still reach the in-app
+   * inbox, and nothing is emailed. Locally, Mailpit catches everything.
+   */
+  SMTP_HOST: optionalNonEmpty(),
+  SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(587),
+  /** True for implicit TLS (port 465); false upgrades with STARTTLS when offered. */
+  SMTP_SECURE: booleanFromEnv(false),
+  SMTP_USER: optionalNonEmpty(),
+  SMTP_PASSWORD: optionalNonEmpty(),
+  MAIL_FROM: z.string().default('CarCare <reminders@carcare.local>'),
+
   /** Escape hatch for tests and local debugging; never turn this off in production. */
   AUTH_RATE_LIMIT_ENABLED: booleanFromEnv(true),
 
@@ -171,6 +184,13 @@ export const envSchemaWithRules = envSchema.superRefine((env, ctx) => {
       code: 'custom',
       path: ['GOOGLE_CLIENT_SECRET'],
       message: 'GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set together, or both left unset',
+    });
+  }
+  if (Boolean(env.SMTP_USER) !== Boolean(env.SMTP_PASSWORD)) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['SMTP_PASSWORD'],
+      message: 'SMTP_USER and SMTP_PASSWORD must be set together, or both left unset',
     });
   }
 });

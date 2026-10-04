@@ -168,8 +168,8 @@ PATCH  /reminders/:id
 POST   /reminders/:id/complete                -> { completed, next }; a repeating one creates its successor
 DELETE /reminders/:id
 
-GET    /vehicles/:id/documents         ?expenseId=&type=     (expiringBefore= in Phase 8)
-POST   /vehicles/:id/documents/upload-url     -> presigned PUT + document id
+GET    /vehicles/:id/documents         ?expenseId=&reminderId=&papers=&type=   papers=true: the car's own papers
+POST   /vehicles/:id/documents/upload-url     -> presigned PUT + document id; expenseId, reminderId or neither (a car paper)
 POST   /documents/:id/confirm                 -> PENDING_UPLOAD -> READY
 GET    /documents/:id/download-url             -> presigned GET, short-lived
 DELETE /documents/:id

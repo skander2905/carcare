@@ -246,14 +246,19 @@ overlapping workers are safe by construction rather than by careful timing.
 `email` is the address the link went to; if the account's address has changed
 since, the link is refused. Issuing a new link deletes the unused old one.
 
-### Document — _Phase 4b_ (expense attachments), extended in Phase 8
+### Document — _Phase 4b_ (expense attachments), extended in Phase 8 (car papers)
 
 `id`, `vehicleId`, `uploadedById`, `type`, `title`, `fileName`, `mimeType`,
 `sizeBytes`, `storageKey` (unique), `checksum?`, `status`, `issuedAt?`,
-`expiresAt?`, `expenseId?`, timestamps. (`maintenanceRecordId` was dropped from the plan:
+`expiresAt?`, `expenseId?`, `reminderId?`, timestamps. (`maintenanceRecordId` was dropped from the plan:
 a maintenance invoice attaches to the record's expense, like a fuel receipt.)
 
-Index: `(vehicleId, type)`, `(vehicleId, expiresAt)`.
+A document belongs to an expense (a receipt), to a reminder (the insurance
+certificate), or — with neither — to the car itself as one of its papers. A
+CHECK refuses both. `issuedAt`/`expiresAt` are unused: Phase 8 was cut down to
+keep expiry dates on reminders only (ADR-023).
+
+Index: `(vehicleId, type)`, `(vehicleId, expiresAt)`, `(expenseId)`, `(reminderId)`.
 
 `status` (`PENDING_UPLOAD` → `READY` | `FAILED`) exists because uploads are
 direct-to-S3 via a presigned URL: the metadata row is created before the bytes
@@ -286,7 +291,7 @@ price. Storing it would freeze a number that should move as better data arrives.
 | `DocumentType`     | `INSURANCE`, `REGISTRATION`, `INSPECTION`, `INVOICE`, `RECEIPT`, `PURCHASE`, `OTHER`                                                                                       |
 | `DocumentStatus`   | `PENDING_UPLOAD`, `READY`, `FAILED`                                                                                                                                        |
 | `TripPurpose`      | `PERSONAL`, `WORK`, `VACATION`, `OTHER`                                                                                                                                    |
-| `NotificationType` | `MAINTENANCE_DUE`, `DOCUMENT_EXPIRING`, `REMINDER_DUE`, `UNUSUAL_CONSUMPTION`, `COST_MILESTONE`                                                                            |
+| `NotificationType` | `MAINTENANCE_DUE`, `REMINDER_DUE` (planned and dropped: `DOCUMENT_EXPIRING`, `UNUSUAL_CONSUMPTION`, `COST_MILESTONE`)                                                      |
 
 `MaintenanceStatus` (`UNKNOWN`, `UPCOMING`, `DUE_SOON`, `DUE`, `OVERDUE`) is deliberately
 **not** stored. It is derived from current mileage and today's date, so a stored
@@ -305,7 +310,6 @@ speculatively — each one is write cost paid on every insert.
 | Mileage timeline for a date range                  | `(vehicle_id, recorded_at)`                          |
 | Hourly sweep for due reminders                     | partial index on `due_date WHERE status = 'PENDING'` |
 | Unread notification badge                          | partial index on `(user_id) WHERE read_at IS NULL`   |
-| Documents expiring soon                            | `(vehicle_id, expires_at)`                           |
 
 ## 7. Migration discipline
 

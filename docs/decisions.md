@@ -652,3 +652,28 @@ leaving the device — Skander's choice).
 **Consequences.** One small endpoint, `GET /vehicles/:id/odometer/context`,
 which leaves out the record being edited so it is not compared with itself.
 Self-hosting the OCR files is a Phase 12 item if the CDN dependency matters.
+
+## ADR-023 — Documents: one place for dates, files where they belong
+
+**Context.** Phase 8 was planned before reminders existed: vehicle documents
+with their own expiry dates and an `DOCUMENT_EXPIRING` alert. Once Phase 7 had
+reminders with a date, a warning window and repetition, that would have been a
+second expiry system — the insurance renewal entered twice, once as a reminder
+and once as a document, and the two free to disagree. Skander did not see the
+need for it.
+
+**Decision.** Dates live on reminders only. A document gains `reminderId`, so a
+reminder can hold its papers (the certificate on "Insurance renewal"); a
+completed repeating reminder keeps its files and its successor starts empty,
+with an offer to add the new one. A document with no expense and no reminder
+is one of the car's papers (registration card, purchase papers), listed on the
+car page. Uploads lock their owner — expense, reminder, or the vehicle for a
+paper — so the per-owner limit holds under concurrent uploads, and deleting a
+reminder purges its stored files after commit, as an expense does.
+
+**Rejected.** A document expiry date that creates a reminder (two sources of
+one date); a separate "Documents" page (the papers belong with the car or the
+reminder they explain).
+
+**Consequences.** `issuedAt` and `expiresAt` stay in the table, unused, rather
+than a migration to drop them for nothing. No new notification type.

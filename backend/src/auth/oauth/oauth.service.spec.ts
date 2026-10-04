@@ -69,6 +69,9 @@ const buildMocks = () => ({
     create: vi.fn<(data: unknown) => Promise<OAuthAccount>>(),
     createUserWithAccount: vi.fn<(user: unknown, account: unknown) => Promise<User>>(),
     touchEmail: vi.fn<(id: string, email: string | undefined) => Promise<void>>(),
+    confirmEmailIfMatches: vi
+      .fn<(userId: string, email: string) => Promise<void>>()
+      .mockResolvedValue(undefined),
     deleteForUser: vi.fn<(userId: string, provider: string) => Promise<number>>(),
   },
   users: {

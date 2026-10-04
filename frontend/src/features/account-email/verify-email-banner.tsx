@@ -25,7 +25,7 @@ export function VerifyEmailBanner() {
       <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 text-sm sm:px-6">
         <MailWarning className="text-warning size-4 shrink-0" aria-hidden />
         <span className="flex-1">
-          Confirm your email to get reminders by email. We sent a link to <strong>{user.email}</strong>.
+          Confirm <strong>{user.email}</strong> to get reminders by email.
         </span>
         <Button
           size="sm"
@@ -34,7 +34,7 @@ export function VerifyEmailBanner() {
           disabled={resend.isPending || resend.isSuccess}
           onClick={() => resend.mutate()}
         >
-          {resend.isSuccess ? 'Sent' : resend.isPending ? 'Sending…' : 'Send it again'}
+          {resend.isSuccess ? 'Sent' : resend.isPending ? 'Sending…' : 'Send me the link'}
         </Button>
       </div>
     </div>

@@ -1,14 +1,26 @@
 import { api } from '@/lib/api/client';
 import { resolveMimeType } from './files';
-import { type StoredDocument, type UploadUrlResponse } from './types';
+import { type FileOwner, type StoredDocument, type UploadUrlResponse } from './types';
 
 export const documentsApi = {
   listForExpense: (vehicleId: string, expenseId: string) =>
     api.get<StoredDocument[]>(`/vehicles/${vehicleId}/documents`, { query: { expenseId } }),
 
+  /** The files an owner holds; for the car's papers, those with no expense or reminder. */
+  listFor: (vehicleId: string, owner: FileOwner) =>
+    api.get<StoredDocument[]>(`/vehicles/${vehicleId}/documents`, { query: ownerQuery(owner) }),
+
   requestUpload: (
     vehicleId: string,
-    body: { expenseId: string; fileName: string; mimeType: string; sizeBytes: number; type?: string },
+    body: {
+      expenseId?: string;
+      reminderId?: string;
+      fileName: string;
+      mimeType: string;
+      sizeBytes: number;
+      type?: string;
+      title?: string;
+    },
   ) => api.post<UploadUrlResponse>(`/vehicles/${vehicleId}/documents/upload-url`, { body }),
 
   confirm: (id: string) => api.post<StoredDocument>(`/documents/${id}/confirm`),
@@ -21,7 +33,26 @@ export const documentsApi = {
 export const documentKeys = {
   forExpense: (vehicleId: string, expenseId: string) =>
     ['vehicles', vehicleId, 'documents', { expenseId }] as const,
+  forOwner: (vehicleId: string, owner: FileOwner) =>
+    ['vehicles', vehicleId, 'documents', ownerQuery(owner)] as const,
 };
+
+function ownerQuery(owner: FileOwner): Record<string, string | boolean> {
+  if ('expenseId' in owner) return { expenseId: owner.expenseId };
+  if ('reminderId' in owner) return { reminderId: owner.reminderId };
+  return { papers: true };
+}
+
+function ownerBody(owner: FileOwner): {
+  expenseId?: string;
+  reminderId?: string;
+  type?: string;
+  title?: string;
+} {
+  if ('expenseId' in owner) return { expenseId: owner.expenseId };
+  if ('reminderId' in owner) return { reminderId: owner.reminderId };
+  return { type: owner.paper, ...(owner.title ? { title: owner.title } : {}) };
+}
 
 /**
  * PUT straight to storage. XHR rather than fetch, because fetch still cannot
@@ -63,12 +94,13 @@ function putToStorage(
  */
 export async function attachFile(
   vehicleId: string,
-  expenseId: string,
+  owner: FileOwner | string,
   file: File,
   onProgress?: (fraction: number) => void,
 ): Promise<StoredDocument> {
   const { document, upload } = await documentsApi.requestUpload(vehicleId, {
-    expenseId,
+    // A bare string is an expense id, as every caller before Phase 8 passed.
+    ...ownerBody(typeof owner === 'string' ? { expenseId: owner } : owner),
     fileName: file.name,
     mimeType: resolveMimeType(file),
     sizeBytes: file.size,

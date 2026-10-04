@@ -8,10 +8,12 @@ import { useAuth } from '@/features/auth/use-auth';
 import { ChoiceChip } from '@/features/fuel/choice-chip';
 import { api, ApiError } from '@/lib/api/client';
 import { type AuthUser } from '@/lib/auth/types';
+import { useServerFeatures } from '@/lib/meta/use-server-features';
 
 /** Whether due reminders are emailed as well as shown in the app. */
 export function NotificationSettings() {
   const { user, adoptProfile } = useAuth();
+  const features = useServerFeatures();
 
   const save = useMutation({
     mutationFn: (emailNotifications: boolean) =>
@@ -38,17 +40,23 @@ export function NotificationSettings() {
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        <fieldset className="space-y-2">
-          <legend className="text-sm font-medium">Email me at {user.email}</legend>
-          <div className="flex gap-2">
-            <ChoiceChip selected={on} disabled={save.isPending} onClick={() => save.mutate(true)}>
-              Yes
-            </ChoiceChip>
-            <ChoiceChip selected={!on} disabled={save.isPending} onClick={() => save.mutate(false)}>
-              No, in the app only
-            </ChoiceChip>
-          </div>
-        </fieldset>
+        {features && !features.email ? (
+          <p className="text-muted-foreground text-sm">
+            This server can&rsquo;t send email yet, so reminders appear under the bell only.
+          </p>
+        ) : (
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-medium">Email me at {user.email}</legend>
+            <div className="flex gap-2">
+              <ChoiceChip selected={on} disabled={save.isPending} onClick={() => save.mutate(true)}>
+                Yes
+              </ChoiceChip>
+              <ChoiceChip selected={!on} disabled={save.isPending} onClick={() => save.mutate(false)}>
+                No, in the app only
+              </ChoiceChip>
+            </div>
+          </fieldset>
+        )}
         {user.emailVerified ? null : (
           <p className="text-warning text-sm">
             Your email isn&rsquo;t confirmed yet, so nothing is emailed. Use the link we sent, or &ldquo;Send

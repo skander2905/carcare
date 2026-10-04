@@ -1,0 +1,78 @@
+# Render Blueprint: the API and its worker, plus the job queue.
+#
+# The free plan, sized for one person and a few friends (docs/deploy.md):
+# - One web service runs both roles (APP_ROLE=all). Free web services sleep
+#   after 15 idle minutes; .github/workflows/keep-awake.yml wakes it every 10,
+#   so the hourly reminder sweep and the 08:00 email digests still run.
+# - Render Key Value (Redis) for BullMQ. `noeviction` is required: BullMQ
+#   loses jobs if Redis evicts keys under memory pressure.
+# - The database (Neon) and file storage (Cloudflare R2) live elsewhere; their secrets are typed into the dashboard (`sync: false`),
+#   never written here — this repository is public.
+
+services:
+  - type: web
+    name: carcare-api
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: .
+    # Free services have no pre-deploy step, so migrations run at start-up.
+    # `migrate deploy` only applies what is new, and takes an advisory lock.
+    dockerCommand: sh -c "node_modules/.bin/prisma migrate deploy && exec node dist/main.js"
+    healthCheckPath: /health/live
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: APP_ROLE
+        value: all
+      - key: LOG_LEVEL
+        value: info
+      - key: LOG_PRETTY
+        value: 'false'
+      # Two proxies in front: Vercel's rewrite, then Render's load balancer.
+      - key: TRUST_PROXY
+        value: '2'
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: carcare-queue
+          property: connectionString
+      # A long random signing key, generated once by Render.
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: REFRESH_COOKIE_SECURE
+        value: 'true'
+      # Set in the dashboard. See docs/deploy.md for each value.
+      - key: DATABASE_URL
+        sync: false
+      - key: WEB_APP_URL
+        sync: false
+      - key: API_PUBLIC_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: S3_ENDPOINT
+        sync: false
+      - key: S3_REGION
+        value: auto
+      - key: S3_BUCKET
+        sync: false
+      - key: S3_ACCESS_KEY_ID
+        sync: false
+      - key: S3_SECRET_ACCESS_KEY
+        sync: false
+      - key: S3_FORCE_PATH_STYLE
+        value: 'true'
+      # No SMTP here: Render's free plan blocks outgoing email ports (25, 465,
+      # 587) since September 2025, so email stays off and reminders reach the
+      # in-app inbox only. See docs/deploy.md, "Email later".
+
+  - type: keyvalue
+    name: carcare-queue
+    plan: free
+    region: frankfurt
+    maxmemoryPolicy: noeviction
+    # Reachable only from Render's private network, never from the internet.
+    ipAllowList: []

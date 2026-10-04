@@ -12,7 +12,8 @@ a working, tested state. Status is updated as phases land.
 | 4b    | **Expense attachments** — optional receipt/invoice photo or PDF on an expense (pulled forward from Phase 8; no OCR)       | ✅ Done |
 | 5     | **Fuel** — entries, full-to-full consumption engine, fuel analytics                                                       | ✅ Done |
 | 6     | **Maintenance** — records, schedules, due/overdue engine                                                                  | ✅ Done |
-| 7     | **Reminders & jobs** — BullMQ queues, worker role, notifications                                                          | ⬜ Next |
+| 7     | **Reminders & jobs** — BullMQ queues, worker role, notifications, account emails                                          | ✅ Done |
+| 7b    | **Easier mileage entry** — rethink how the odometer is entered across the forms (requested 2026-10-03; to be scoped)      | ⬜ Next |
 | 8     | **Documents** — expiry tracking, vehicle-level documents (upload/download landed in 4b)                                   | ⬜      |
 | 9     | **Analytics** — dashboard, charts, cost/km, total cost of ownership                                                       | ⬜      |
 | 10    | **Trips** — trip log and estimated trip cost                                                                              | ⬜      |
@@ -386,6 +387,72 @@ unchanged.
 job), predicting a km-based due _date_ from the car's pace, and a schedule
 satisfied by several job types at once (a full service covering oil, filters and
 plugs is one record against one schedule).
+
+## Phase 7 — delivered
+
+**Backend**
+
+- `Reminder`, `Notification` and `EmailToken`, with the partial indexes the
+  sweep, the unread badge and the email outbox read. Reminders hold a calendar
+  `date` and/or a mileage; repeating ones are succeeded on completion, counted
+  from the due date.
+- The due engine gained `dueAt` for fixed due points, so reminders and
+  schedules are classified by one rule.
+- **The worker role** (ADR-020). `APP_ROLE` picks the module graph before Nest
+  starts; `worker` opens no port. An hourly BullMQ job sweeps every unarchived
+  car, plus one at boot. `dedupeKey` (subject, status, due point) makes each
+  step announced once per cycle, whatever the number of sweeps or workers.
+- **Email** as one digest per person, held until 08:00 in their time zone,
+  claimed with `FOR UPDATE SKIP LOCKED` and marked sent in the same transaction.
+  The table is the outbox: every sweep re-asks for anyone still owed one.
+- **Account emails** (ADR-021), deferred since Phase 2: confirm your address
+  (nothing is emailed until then), forgot password (same answer whether or not
+  the account exists; a reset signs out every session), and a signed
+  one-click unsubscribe with RFC 8058 headers.
+- SMTP through nodemailer, optional like storage; the transport is checked at
+  start-up. Compose gains `worker` and `mailpit`. Going online: `docs/email.md`.
+- 24 unit tests and three integration suites (39 tests): reminders, the sweep
+  and digest, account emails.
+
+**Frontend**
+
+- A bell with an unread count (polled every minute), a `/notifications` inbox,
+  and `/vehicles/:id/reminders` with one-tap presets (insurance, road tax, loan,
+  warranty) that fill in how often it repeats and how early to warn — never the
+  date itself. A reminders card on the vehicle page.
+- A banner until the email is confirmed; `/verify-email`, `/forgot-password`,
+  `/reset-password` and `/unsubscribe`; an email switch in settings.
+
+**Fixed during verification.**
+
+- **The idempotency test could not fail.** With `skipDuplicates` removed, the
+  repeated sweep's unique violations were caught per car and counted as
+  `failed`, so "nothing new" still held. It now asserts `failed: 0` too.
+- **A concurrency test did not test the race**, again (see Phase 4): three
+  simultaneous password resets passed with the single-use guard removed,
+  because the requests arrived in sequence. The guard now has a direct test.
+- A comment claimed `SKIP LOCKED` prevents double sends. It does not — the row
+  lock does; Postgres re-checks the WHERE after waiting. Removing the lock
+  entirely does send duplicates, and the test catches it.
+
+**Not built:** web push, unusual-consumption alerts and the sweep for
+unconfirmed uploads (declined for this phase), changing one's email address,
+and deleting a notification.
+
+## Phase 7b — easier mileage entry (to be scoped)
+
+Requested by Skander on 2026-10-03: the kilometrage input is awkward to use
+and needs its own feature. Today every form that takes a mileage (expense,
+fuel, maintenance, odometer reading) has a plain number field. The current
+reading is shown as a hint and never prefilled, because a wrong guess would
+pass validation silently.
+
+To settle before building: what exactly feels wrong (typing a six-digit
+number on a phone, not knowing the last reading, the validation messages),
+and which direction to take. Candidates: a field seeded with the last
+reading's leading digits, a "+ km since last time" mode, a stepper or chips
+for the trip distance, or reading the dashboard from a photo (OCR, deferred
+elsewhere by design).
 
 ## Deferred by design
 

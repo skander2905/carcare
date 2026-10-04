@@ -529,3 +529,85 @@ as for fuel, so `Document.maintenanceRecordId` was dropped from the plan.
 **Consequences.** Every schedule read costs one indexed query for its records;
 a schedule is serviced once or twice a year, so this is a handful of rows.
 Reminders (Phase 7) will call the same engine rather than duplicate it.
+
+## ADR-020 — Reminders: a sweep that reads, a table that is the outbox
+
+**Context.** Phase 7 turns due states into messages: an in-app inbox and email.
+Two sources fall due — maintenance schedules (Phase 6) and one-off reminders
+with a fixed date or mileage. Status is derived, never stored (ADR-019), so
+nothing in the database flips when something becomes due; something has to
+look.
+
+**Decision — one sweep, hourly, in the worker.** A repeatable BullMQ job runs
+the due engine over every active schedule and pending reminder of every
+unarchived car, and inserts a notification for whatever is `DUE_SOON`, `DUE`
+or `OVERDUE`. Reminders reuse the engine through `dueAt`, a fixed due point
+classified by the same windows. Rejected: evaluating on every write (a fuel
+fill, an odometer reading, a schedule edit), which would put notification logic
+in five services and still miss the one change no write causes — the calendar
+moving on.
+
+**Decision — idempotency by key.** `dedupeKey` is the subject, the status and
+the due point (`maintenance:<id>:DUE_SOON:130100km/-`), unique per user. Each
+step is announced once per cycle; escalating announces again; logging the
+service moves the due point and opens the next cycle. Repeated sweeps and
+overlapping workers insert nothing, by constraint rather than by timing.
+
+**Decision — email is a digest, sent in daylight, from an outbox.** Whether a
+notification is owed an email is settled at insert (`PENDING` or `SKIPPED`:
+email off, address unconfirmed, no transport). After each sweep, everyone with
+`PENDING` rows gets one digest job, delayed to 08:00 in their own time zone if
+it is night. The job claims rows with `FOR UPDATE SKIP LOCKED`, sends, and marks
+them sent in one transaction: a failed send rolls back and retries; overlapping
+jobs cannot send the same row twice. Rows read in the app before the morning
+are skipped. Delivery is at-least-once — a crash between the server accepting
+the email and the commit sends it twice, the right way round for a reminder.
+
+**Decision — roles.** `APP_ROLE` picks the module graph before Nest starts:
+`api` never loads BullMQ, `worker` opens no port, `all` is for local
+development. Integration suites boot `AppModule`, so no schedule ever runs
+behind a test.
+
+**Consequences.** A notification can lag the moment it became true by up to an
+hour, plus the night. The sweep is N small queries per car; architecture.md §8
+already names it as a pressure point, and the keyset paging is where sharding
+would go. Not built: per-write evaluation, web push, unusual-consumption alerts,
+the sweep for unconfirmed uploads.
+
+## ADR-021 — Account emails: confirming an address, resetting a password, stopping email
+
+**Context.** Phase 2 deferred both for want of an email provider. Phase 7
+brings one, and with it a new risk: anyone can register with someone else's
+address, and reminders would then be mailed to a stranger.
+
+**Decision — nothing is emailed to an unconfirmed address.** Sign-up sends a
+confirmation link; reminders reach the in-app inbox regardless, but are only
+emailed once `emailVerifiedAt` is set. A Google sign-up counts as confirmed
+(the provider only returns verified addresses, ADR-017); existing Google-made
+accounts were back-filled by the migration, password accounts were not.
+
+**Decision — links are single-use random tokens.** 256 bits, stored as SHA-256
+like refresh tokens, spent with a conditional update so two clicks cannot both
+succeed. Confirm lasts 48 h, reset 1 h. A link names the address it was sent
+to and is refused if the account's address has changed since. A reset sets
+the password, revokes every refresh token, and confirms the address.
+
+**Decision — "forgot password" never says whether an account exists.** Always
+202; the email is sent without awaiting it, so the response time does not
+differ either. Rate limited per IP and per address.
+
+**Decision — unsubscribe without signing in.** Digests carry an HMAC-signed,
+non-expiring link (derived from the access-token key) and RFC 8058
+`List-Unsubscribe` headers, so Gmail shows its own button. The endpoint is POST
+only; the link in the body opens a page with a button, because mail scanners
+open links.
+
+**Decision — SMTP, chosen by configuration.** One transport speaks to Mailpit
+locally, Gmail with an app password while the app has no domain of its own,
+and Brevo once it does (`docs/email.md`). The worker and API check the server
+at start-up and log a clear error if it refuses.
+
+**Consequences.** A free `*.vercel.app` domain cannot carry SPF/DKIM records,
+so authenticated sending from a provider needs a domain the project owns.
+Changing one's email address still has no flow; when it gets one, it must clear
+`emailVerifiedAt` and send a new link.

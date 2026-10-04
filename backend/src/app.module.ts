@@ -15,6 +15,7 @@ import { AppConfigModule } from './config/config.module.js';
 import { loggingConfig } from './config/configuration.js';
 import { type LoggingConfig } from './config/config.types.js';
 import { HealthModule } from './health/health.module.js';
+import { MetaModule } from './meta/meta.module.js';
 import { JobsModule } from './jobs/jobs.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { RedisModule } from './redis/redis.module.js';
@@ -52,6 +53,7 @@ import { VehiclesModule } from './vehicles/vehicles.module.js';
     RateLimitModule,
 
     HealthModule,
+    MetaModule,
 
     // AuthModule registers the global JwtAuthGuard, so every route added by a
     // feature module below is protected by default and has to opt out

@@ -51,4 +51,9 @@ describe('Health (e2e)', () => {
     expect(response.body).toMatchObject({ statusCode: 404, error: 'NotFound' });
     expect(response.body.timestamp).toEqual(expect.any(String));
   });
+
+  it('says which optional features the server has, without signing in', async () => {
+    // The suite pins S3 and SMTP off (setup-e2e.ts).
+    await request(httpServer(app)).get('/api/v1/features').expect(200, { email: false, files: false });
+  });
 });

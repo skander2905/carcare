@@ -57,8 +57,10 @@ async function bootstrap(withWorker: boolean): Promise<void> {
 
   // Behind a reverse proxy, express must be told to believe X-Forwarded-* or
   // every client appears to share the proxy's IP (breaking rate limiting).
-  if (http.trustProxy) {
-    app.set('trust proxy', 1);
+  if (http.trustProxy > 0) {
+    // A hop count, not `true`: trusting every hop would let a caller choose
+    // their own address by sending X-Forwarded-For themselves.
+    app.set('trust proxy', http.trustProxy);
   }
 
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));

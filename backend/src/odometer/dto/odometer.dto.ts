@@ -1,6 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
-import { IsDateString, IsInt, IsOptional, IsString, Length, Max, Min } from 'class-validator';
+import { IsDateString, IsInt, IsOptional, IsString, IsUUID, Length, Max, Min } from 'class-validator';
 import { PageQueryDto } from '../../common/http/page-query.dto.js';
 import { MAX_ODOMETER_KM } from '../../vehicles/dto/vehicle.dto.js';
 import { type OdometerReading } from '../../prisma/model.types.js';
@@ -69,5 +69,78 @@ export function toReadingResponse(reading: OdometerReading): OdometerReadingResp
     source: reading.source,
     sourceId: reading.sourceId,
     notes: reading.notes,
+  };
+}
+
+export class MileageContextQueryDto {
+  @ApiPropertyOptional({
+    example: '2026-10-04T08:30:00.000Z',
+    description: 'When the reading is taken. Defaults to now.',
+  })
+  @IsOptional()
+  @IsDateString()
+  at?: string;
+
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'The record being edited, left out of the comparison.',
+  })
+  @IsOptional()
+  @IsUUID()
+  excludeSourceId?: string;
+}
+
+export class ReadingPointResponse {
+  @ApiProperty({ example: 122_700 })
+  odometerKm: number;
+
+  @ApiProperty({ example: '2026-09-29T08:30:00.000Z' })
+  recordedAt: string;
+}
+
+export class MileageContextResponse {
+  @ApiPropertyOptional({
+    type: ReadingPointResponse,
+    nullable: true,
+    description: 'The reading just before.',
+  })
+  previous: ReadingPointResponse | null;
+
+  @ApiPropertyOptional({
+    type: ReadingPointResponse,
+    nullable: true,
+    description: 'The reading just after, when backdating.',
+  })
+  next: ReadingPointResponse | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    example: 42.5,
+    description: 'Usual km per day over the last six months.',
+  })
+  kmPerDay: number | null;
+
+  @ApiPropertyOptional({
+    type: ReadingPointResponse,
+    nullable: true,
+    description: "The last fill-up's reading, for the trip counter.",
+  })
+  lastFuelFill: ReadingPointResponse | null;
+}
+
+const point = (reading: OdometerReading | null): ReadingPointResponse | null =>
+  reading ? { odometerKm: reading.odometerKm, recordedAt: reading.recordedAt.toISOString() } : null;
+
+export function toMileageContextResponse(context: {
+  previous: OdometerReading | null;
+  next: OdometerReading | null;
+  kmPerDay: number | null;
+  lastFuelFill: OdometerReading | null;
+}): MileageContextResponse {
+  return {
+    previous: point(context.previous),
+    next: point(context.next),
+    kmPerDay: context.kmPerDay,
+    lastFuelFill: point(context.lastFuelFill),
   };
 }

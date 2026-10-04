@@ -2,12 +2,13 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { History, LoaderCircle, MapPin } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { FormField } from '@/features/auth/form-field';
+import { MileageInput } from '@/features/vehicles/mileage-input';
 import { AttachmentPicker } from '@/features/expenses/attachment-picker';
 import { useAttachFiles } from '@/features/expenses/use-attach-files';
 import { ApiError } from '@/lib/api/client';
@@ -15,13 +16,7 @@ import { IdempotencyKeys } from '@/lib/api/idempotency';
 import { attachmentProblem, formatFileSize } from '@/lib/documents/files';
 import { incurredAtFromDate, toDateInputValue } from '@/lib/expenses/format';
 import { fuelApi, fuelKeys } from '@/lib/fuel/fuel-api';
-import {
-  LIKELY_MISSED_FILL_KM,
-  PUMP_FUELS,
-  daysAgo,
-  defaultPumpFuel,
-  formatDistance,
-} from '@/lib/fuel/format';
+import { LIKELY_MISSED_FILL_KM, PUMP_FUELS, defaultPumpFuel, formatDistance } from '@/lib/fuel/format';
 import { defaultPrice, officialPricesNeedChecking } from '@/lib/fuel/price-source';
 import { litresFor, normaliseDecimal, priceFor, totalFor } from '@/lib/fuel/pump-math';
 import { type CreateFuelInput, type FuelEntry, type UpdateFuelInput } from '@/lib/fuel/types';
@@ -128,6 +123,10 @@ export function FuelForm({ vehicleId, vehicleFuelType, currency, entry, onDone }
   const finder = useStationFinder(vehicleId, !entry);
 
   const set = (patch: Partial<Values>) => setValues((current) => ({ ...current, ...patch }));
+  const setOdometer = useCallback(
+    (odometerKm: string) => setValues((current) => ({ ...current, odometerKm })),
+    [],
+  );
 
   /** Recomputes whichever figure was worked out, after one of the three moved. */
   const derive = (next: Values, nextTyped: Typed): Values => {
@@ -460,22 +459,6 @@ export function FuelForm({ vehicleId, vehicleFuelType, currency, entry, onDone }
 
       <div className="grid gap-3 sm:grid-cols-2">
         <FormField
-          id={id('odometer')}
-          label="Mileage"
-          type="number"
-          inputMode="numeric"
-          placeholder={hints ? String(hints.currentOdometerKm) : '121480'}
-          value={values.odometerKm}
-          error={errors.odometerKm}
-          hint={
-            hints
-              ? `Last recorded ${formatKm(hints.currentOdometerKm)}` +
-                (lastFill ? ` · last fill-up ${daysAgo(lastFill.filledAt)}` : '')
-              : undefined
-          }
-          onChange={(event) => set({ odometerKm: event.target.value })}
-        />
-        <FormField
           id={id('date')}
           label="Date"
           type="date"
@@ -483,6 +466,16 @@ export function FuelForm({ vehicleId, vehicleFuelType, currency, entry, onDone }
           value={values.date}
           error={errors.date}
           onChange={(event) => set({ date: event.target.value })}
+        />
+        <MileageInput
+          id={id('odometer')}
+          vehicleId={vehicleId}
+          value={values.odometerKm}
+          onChange={setOdometer}
+          date={values.date}
+          excludeSourceId={entry?.id}
+          allowTrip
+          error={errors.odometerKm}
         />
       </div>
 

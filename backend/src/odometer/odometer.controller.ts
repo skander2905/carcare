@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiCreatedResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { ApiPaginatedResponse, type Paginated, paginate } from '../common/http/paginated.js';
 import { VehicleRole } from '../generated/prisma/enums.js';
 import { CurrentVehicle } from '../vehicles/decorators/vehicle-access.decorator.js';
@@ -8,6 +8,9 @@ import { VehicleAccessGuard } from '../vehicles/guards/vehicle-access.guard.js';
 import { type VehicleAccess } from '../vehicles/vehicle-access.types.js';
 import {
   ListReadingsQueryDto,
+  MileageContextQueryDto,
+  MileageContextResponse,
+  toMileageContextResponse,
   OdometerReadingResponse,
   RecordReadingDto,
   toReadingResponse,
@@ -38,6 +41,20 @@ export class OdometerController {
     );
 
     return paginate(readings.map(toReadingResponse), total, query.page, query.limit);
+  }
+
+  @Get('context')
+  @ApiOperation({
+    summary: 'What a mileage field needs: the readings either side, the usual pace, the last fill-up',
+  })
+  @ApiOkResponse({ type: MileageContextResponse })
+  async context(
+    @Param('vehicleId', ParseUUIDPipe) _vehicleId: string,
+    @CurrentVehicle() access: VehicleAccess,
+    @Query() query: MileageContextQueryDto,
+  ): Promise<MileageContextResponse> {
+    const at = query.at ? new Date(query.at) : new Date();
+    return toMileageContextResponse(await this.odometer.context(access.vehicleId, at, query.excludeSourceId));
   }
 
   @Post()

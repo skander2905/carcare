@@ -39,6 +39,64 @@ export class OdometerRepository {
     await tx.$queryRaw`SELECT id FROM vehicles WHERE id = ${vehicleId}::uuid FOR UPDATE`;
   }
 
+  /** Readings in a window, oldest first, leaving out the ones a given record produced. */
+  between(
+    client: PrismaLike,
+    vehicleId: string,
+    from: Date,
+    to: Date,
+    excludeSourceId?: string,
+  ): Promise<OdometerReading[]> {
+    return client.odometerReading.findMany({
+      where: {
+        vehicleId,
+        recordedAt: { gte: from, lte: to },
+        ...(excludeSourceId ? { OR: [{ sourceId: null }, { sourceId: { not: excludeSourceId } }] } : {}),
+      },
+      orderBy: [{ recordedAt: 'asc' }, { createdAt: 'asc' }],
+    });
+  }
+
+  /** The newest reading of one kind at or before a moment, e.g. the last fill-up's. */
+  lastOfSource(
+    client: PrismaLike,
+    vehicleId: string,
+    source: OdometerSource,
+    at: Date,
+    excludeSourceId?: string,
+  ): Promise<OdometerReading | null> {
+    return client.odometerReading.findFirst({
+      where: {
+        vehicleId,
+        source,
+        recordedAt: { lte: at },
+        ...(excludeSourceId ? { OR: [{ sourceId: null }, { sourceId: { not: excludeSourceId } }] } : {}),
+      },
+      orderBy: [{ recordedAt: 'desc' }, { createdAt: 'desc' }],
+    });
+  }
+
+  /** Like `previousReading`/`nextReading`, but able to leave out the record being edited. */
+  neighbour(
+    client: PrismaLike,
+    vehicleId: string,
+    at: Date,
+    direction: 'before' | 'after',
+    excludeSourceId?: string,
+  ): Promise<OdometerReading | null> {
+    const before = direction === 'before';
+    return client.odometerReading.findFirst({
+      where: {
+        vehicleId,
+        recordedAt: before ? { lte: at } : { gt: at },
+        ...(excludeSourceId ? { OR: [{ sourceId: null }, { sourceId: { not: excludeSourceId } }] } : {}),
+      },
+      orderBy: before
+        ? [{ recordedAt: 'desc' }, { createdAt: 'desc' }]
+        : [{ recordedAt: 'asc' }, { createdAt: 'asc' }],
+    });
+  }
+
   /** The newest reading at or before `recordedAt`. */
   previousReading(client: PrismaLike, vehicleId: string, recordedAt: Date): Promise<OdometerReading | null> {
     return client.odometerReading.findFirst({

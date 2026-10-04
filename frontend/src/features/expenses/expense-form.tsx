@@ -3,13 +3,14 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useRef, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { Controller, useForm, useWatch } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
 import { FormField } from '@/features/auth/form-field';
+import { MileageInput } from '@/features/vehicles/mileage-input';
 import { ApiError } from '@/lib/api/client';
 import { IdempotencyKeys } from '@/lib/api/idempotency';
 import { attachmentProblem, formatFileSize } from '@/lib/documents/files';
@@ -107,12 +108,16 @@ export function ExpenseForm({ vehicleId, expense, onDone }: ExpenseFormProps) {
 
   const {
     register,
+    control,
     handleSubmit,
     formState: { errors },
   } = useForm<ExpenseValues>({
     resolver: zodResolver(expenseSchema),
     defaultValues: defaultsFor(expense),
   });
+
+  // The mileage box compares the reading with the ones around this day.
+  const date = useWatch({ control, name: 'date' });
 
   const save = useMutation({
     mutationFn: (values: ParsedExpense) => {
@@ -189,15 +194,21 @@ export function ExpenseForm({ vehicleId, expense, onDone }: ExpenseFormProps) {
           {...register('date')}
         />
 
-        <FormField
-          id={id('odometerKm')}
-          label="Mileage"
-          type="number"
-          inputMode="numeric"
-          placeholder="121500"
-          hint="Optional. Also added to the mileage timeline."
-          error={errors.odometerKm?.message}
-          {...register('odometerKm')}
+        <Controller
+          control={control}
+          name="odometerKm"
+          render={({ field }) => (
+            <MileageInput
+              id={id('odometerKm')}
+              vehicleId={vehicleId}
+              value={field.value == null ? '' : String(field.value as string | number)}
+              onChange={field.onChange}
+              date={date}
+              excludeSourceId={expense?.id}
+              optional
+              error={errors.odometerKm?.message}
+            />
+          )}
         />
 
         <FormField

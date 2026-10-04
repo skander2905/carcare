@@ -2,12 +2,13 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarClock, History } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { FormField } from '@/features/auth/form-field';
+import { MileageInput } from '@/features/vehicles/mileage-input';
 import { AttachmentPicker } from '@/features/expenses/attachment-picker';
 import { useAttachFiles } from '@/features/expenses/use-attach-files';
 import { ChoiceChip } from '@/features/fuel/choice-chip';
@@ -31,7 +32,7 @@ import {
   type MaintenanceType,
   type UpdateRecordInput,
 } from '@/lib/maintenance/types';
-import { formatKm, formatMoney } from '@/lib/vehicles/format';
+import { formatMoney } from '@/lib/vehicles/format';
 import { vehicleKeys } from '@/lib/vehicles/vehicles-api';
 
 interface Values {
@@ -133,6 +134,10 @@ export function MaintenanceForm({ vehicleId, currency, record, draft, onDone }: 
   });
 
   const set = (patch: Partial<Values>) => setValues((current) => ({ ...current, ...patch }));
+  const setOdometer = useCallback(
+    (odometerKm: string) => setValues((current) => ({ ...current, odometerKm })),
+    [],
+  );
 
   /*
    * The matching schedule, applied during render once schedules arrive and
@@ -371,19 +376,6 @@ export function MaintenanceForm({ vehicleId, currency, record, draft, onDone }: 
 
       <div className="grid gap-3 sm:grid-cols-2">
         <FormField
-          id={id('odometer')}
-          label="Mileage"
-          type="number"
-          inputMode="numeric"
-          placeholder={suggestions.data ? String(suggestions.data.currentOdometerKm) : '121480'}
-          value={values.odometerKm}
-          error={errors.odometerKm}
-          hint={
-            suggestions.data ? `Last recorded ${formatKm(suggestions.data.currentOdometerKm)}` : undefined
-          }
-          onChange={(event) => set({ odometerKm: event.target.value })}
-        />
-        <FormField
           id={id('date')}
           label="Date"
           type="date"
@@ -391,6 +383,15 @@ export function MaintenanceForm({ vehicleId, currency, record, draft, onDone }: 
           value={values.date}
           error={errors.date}
           onChange={(event) => set({ date: event.target.value })}
+        />
+        <MileageInput
+          id={id('odometer')}
+          vehicleId={vehicleId}
+          value={values.odometerKm}
+          onChange={setOdometer}
+          date={values.date}
+          excludeSourceId={record?.id}
+          error={errors.odometerKm}
         />
       </div>
 

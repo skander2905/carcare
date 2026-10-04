@@ -5,12 +5,11 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ApiError } from '@/lib/api/client';
 import { formatKm } from '@/lib/vehicles/format';
 import { vehicleKeys, vehiclesApi } from '@/lib/vehicles/vehicles-api';
+import { MileageInput } from './mileage-input';
 
 const SOURCE_LABELS: Record<string, string> = {
   MANUAL: 'Entered by hand',
@@ -76,29 +75,20 @@ export function OdometerTimeline({ vehicleId }: { vehicleId: string }) {
       </CardHeader>
 
       <CardContent className="space-y-5">
-        <form onSubmit={submit} className="flex flex-wrap items-end gap-3">
-          <div className="min-w-40 flex-1 space-y-2">
-            <Label htmlFor="odometerKm">Add a reading</Label>
-            <Input
-              id="odometerKm"
-              inputMode="numeric"
-              placeholder="121500"
-              value={value}
-              aria-invalid={Boolean(error)}
-              aria-describedby={error ? 'odometer-error' : undefined}
-              onChange={(event) => setValue(event.target.value)}
-            />
-          </div>
+        <form onSubmit={submit} className="space-y-3">
+          <MileageInput
+            id="odometerKm"
+            vehicleId={vehicleId}
+            label="Add a reading"
+            value={value}
+            onChange={setValue}
+            date=""
+            error={error ?? undefined}
+          />
           <Button type="submit" disabled={!value || record.isPending}>
             {record.isPending ? 'Saving…' : 'Record'}
           </Button>
         </form>
-
-        {error ? (
-          <p id="odometer-error" role="alert" className="text-destructive text-sm">
-            {error}
-          </p>
-        ) : null}
 
         {readings.isLoading ? (
           <div className="space-y-2">

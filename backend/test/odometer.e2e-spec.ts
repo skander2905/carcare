@@ -203,4 +203,64 @@ describe('Odometer timeline (e2e)', () => {
       expect(body.data[0].odometerKm).toBe(122_000);
     });
   });
+
+  describe('context for a mileage field', () => {
+    const context = (query: Record<string, string> = {}) =>
+      request(httpServer(app))
+        .get(`/api/v1/vehicles/${vehicleId}/odometer/context`)
+        .query(query)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+    const daysAgoIso = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
+
+    it('gives the reading before, the usual pace, and nothing it does not know', async () => {
+      // The initial reading is "now"; add older history to have a pace.
+      await record({ odometerKm: 117_000, recordedAt: daysAgoIso(60) }).expect(201);
+      await record({ odometerKm: 118_500, recordedAt: daysAgoIso(30) }).expect(201);
+
+      const { body } = await context();
+      expect(body).toMatchObject({
+        previous: { odometerKm: 120_000 },
+        next: null,
+        lastFuelFill: null,
+      });
+      // 3,000 km over 60 days.
+      expect(body.kmPerDay).toBeCloseTo(50, 0);
+    });
+
+    it('looks either side of a backdated moment', async () => {
+      await record({ odometerKm: 117_000, recordedAt: daysAgoIso(60) }).expect(201);
+      const { body } = await context({ at: daysAgoIso(45) });
+      expect(body).toMatchObject({ previous: { odometerKm: 117_000 }, next: { odometerKm: 120_000 } });
+    });
+
+    it('leaves out the record being edited, and finds the last fill-up', async () => {
+      const fill = await request(httpServer(app))
+        .post(`/api/v1/vehicles/${vehicleId}/fuel`)
+        .set('Authorization', `Bearer ${token}`)
+        .send({ odometerKm: 120_400, volumeLiters: '40', totalCost: '100' })
+        .expect(201);
+
+      expect((await context()).body).toMatchObject({
+        previous: { odometerKm: 120_400 },
+        lastFuelFill: { odometerKm: 120_400 },
+      });
+      // Editing that fill-up: it must not be compared with itself.
+      expect((await context({ excludeSourceId: fill.body.id })).body).toMatchObject({
+        previous: { odometerKm: 120_000 },
+        lastFuelFill: null,
+      });
+    });
+
+    it("answers 404 for someone else's car", async () => {
+      const other = await request(httpServer(app))
+        .post('/api/v1/auth/register')
+        .send({ email: 'other@example.com', password: PASSWORD, displayName: 'Other' })
+        .expect(201);
+      await request(httpServer(app))
+        .get(`/api/v1/vehicles/${vehicleId}/odometer/context`)
+        .set('Authorization', `Bearer ${other.body.accessToken}`)
+        .expect(404);
+    });
+  });
 });

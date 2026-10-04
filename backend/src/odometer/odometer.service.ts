@@ -1,3 +1,4 @@
+import { kmPerDay } from './domain/pace.js';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { type Prisma } from '../generated/prisma/client.js';
 import { OdometerSource } from '../generated/prisma/enums.js';
@@ -168,4 +169,36 @@ export class OdometerService {
 
     return { readings, total };
   }
+
+  /**
+   * What a mileage field needs to help someone type a reading taken at `at`:
+   * the readings either side, the car's usual pace, and the last fill-up's
+   * reading for the trip counter. `excludeSourceId` leaves out the record being
+   * edited, so it is not compared with itself.
+   */
+  async context(vehicleId: string, at: Date, excludeSourceId?: string): Promise<MileageContext> {
+    const [previous, next, recent, lastFill] = await Promise.all([
+      this.readings.neighbour(this.prisma, vehicleId, at, 'before', excludeSourceId),
+      this.readings.neighbour(this.prisma, vehicleId, at, 'after', excludeSourceId),
+      this.readings.between(
+        this.prisma,
+        vehicleId,
+        new Date(at.getTime() - PACE_WINDOW_MS),
+        at,
+        excludeSourceId,
+      ),
+      this.readings.lastOfSource(this.prisma, vehicleId, 'FUEL', at, excludeSourceId),
+    ]);
+    return { previous, next, kmPerDay: kmPerDay(recent), lastFuelFill: lastFill };
+  }
+}
+
+/** Half a year: long enough to smooth out holidays, short enough to follow a new commute. */
+const PACE_WINDOW_MS = 180 * 86_400_000;
+
+export interface MileageContext {
+  previous: OdometerReading | null;
+  next: OdometerReading | null;
+  kmPerDay: number | null;
+  lastFuelFill: OdometerReading | null;
 }

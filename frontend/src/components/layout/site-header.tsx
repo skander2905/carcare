@@ -3,6 +3,7 @@ import { Gauge } from 'lucide-react';
 import { ThemeToggle } from '@/components/theme-toggle';
 import { Button } from '@/components/ui/button';
 import { UserMenu } from '@/features/auth/user-menu';
+import { NotificationBell } from '@/features/notifications/notification-bell';
 import { env } from '@/lib/env';
 
 export function SiteHeader() {
@@ -21,6 +22,7 @@ export function SiteHeader() {
             </a>
           </Button>
           <ThemeToggle />
+          <NotificationBell />
           <UserMenu />
         </nav>
       </div>

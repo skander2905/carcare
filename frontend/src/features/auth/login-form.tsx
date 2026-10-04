@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
@@ -107,6 +108,11 @@ export function LoginForm() {
           error={errors.password?.message}
           {...register('password')}
         />
+        <p className="-mt-2 text-right text-sm">
+          <Link href="/forgot-password" className="text-muted-foreground underline underline-offset-4">
+            Forgot your password?
+          </Link>
+        </p>
 
         {(formError ?? callbackError) ? (
           // role="alert" so the failure is announced, not merely displayed.

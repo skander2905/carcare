@@ -7,6 +7,10 @@ export interface AuthUser {
   currency: string;
   locale: string;
   timezone: string;
+  /** Whether due reminders are also emailed. */
+  emailNotifications: boolean;
+  /** Whether the address has been confirmed; nothing is emailed until it is. */
+  emailVerified: boolean;
   createdAt: string;
 }
 

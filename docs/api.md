@@ -85,8 +85,17 @@ POST   /auth/refresh
 POST   /auth/logout
 GET    /auth/me
 GET    /users/me
-PATCH  /users/me
+PATCH  /users/me                      (emailNotifications since Phase 7)
+
+POST   /auth/email/verify             { token }      public; confirms the address
+POST   /auth/email/verify/resend                     sends the link again
+POST   /auth/password/forgot          { email }      public; 202 whether or not the account exists
+POST   /auth/password/reset           { token, password }   public; signs out every session
 ```
+
+Emailed links carry a single-use token; only its SHA-256 is stored. Confirming
+lasts 48 hours, resetting 1 hour, and a link sent to an address the account no
+longer has is refused (ADR-021).
 
 ### Federated sign-in
 
@@ -151,9 +160,11 @@ DELETE /maintenance-schedules/:id                   (records are kept, unlinked)
 ### Reminders, documents, trips
 
 ```
-GET    /vehicles/:id/reminders         ?status=&dueBefore=
+GET    /vehicles/:id/reminders         ?status=&dueBefore=   pending most urgent first, then completed
 POST   /vehicles/:id/reminders
+GET    /reminders/:id
 PATCH  /reminders/:id
+POST   /reminders/:id/complete                -> { completed, next }; a repeating one creates its successor
 DELETE /reminders/:id
 
 GET    /vehicles/:id/documents         ?expenseId=&type=     (expiringBefore= in Phase 8)
@@ -179,9 +190,15 @@ GET    /vehicles/:id/analytics/cost-per-km      ?from=&to=
 GET    /vehicles/:id/analytics/ownership        -> total cost of ownership
 
 GET    /notifications                  ?unreadOnly=&page=&limit=
+GET    /notifications/unread-count     -> { count }; cheap enough to poll for the badge
 PATCH  /notifications/:id/read
 POST   /notifications/read-all
+POST   /notifications/unsubscribe      ?token=   public; the signed "stop these emails" link (RFC 8058)
 ```
+
+Notifications are written by the worker's hourly sweep, never by a request
+(ADR-020). The unsubscribe endpoint is POST only, so a mail scanner opening the
+link changes nothing; Gmail's own button posts to it directly.
 
 ## 5. Pagination
 

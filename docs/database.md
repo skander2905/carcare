@@ -95,7 +95,11 @@ the timeline to catch any drift.
 ### User — _Phase 1_
 
 `id`, `email` (unique, lower-cased), `passwordHash`, `displayName`, `role`,
-`currency`, `locale`, `timezone`, timestamps.
+`currency`, `locale`, `timezone`, `emailNotifications`, `emailVerifiedAt?`, timestamps.
+
+`emailVerifiedAt` (Phase 7) is set by the emailed confirmation link, by a
+password reset, or at sign-up through a provider that verified the address.
+Nothing is emailed to an address without it (ADR-021).
 
 Email is normalised before insert so `Skander@x.com` and `skander@x.com` cannot
 both register. `currency` is a per-user display default; per-record currency is
@@ -199,9 +203,16 @@ rather than letting it sit there silently doing nothing.
 
 ### Reminder — _Phase 7_
 
-`id`, `vehicleId`, `userId`, `type`, `title`, `description?`, `dueDate?`,
-`dueOdometerKm?`, `notifyBeforeDays?`, `notifyBeforeKm?`, `status`,
-`completedAt?`, timestamps.
+`id`, `vehicleId`, `createdById?`, `type`, `title`, `description?`, `dueDate?`
+(a calendar `date`), `dueOdometerKm?`, `notifyBeforeDays`, `notifyBeforeKm`,
+`repeatEveryMonths?`, `status`, `completedAt?`, timestamps.
+
+`userId` became `createdById`, as on every other table: who made it, not who
+hears about it — every member of the car is told. CHECKs: a date or a mileage;
+repeating needs a date to count from; `completedAt` exactly when `COMPLETED`.
+Completing a repeating reminder inserts its successor rather than moving the
+date, so the paid one keeps its completion date. Status is derived on read by
+the maintenance due engine's `dueAt`, like a schedule's.
 
 Index: `(vehicleId, dueDate)`, and a **partial** index on
 `(dueDate) WHERE status = 'PENDING'` — the hourly sweep only ever looks at
@@ -211,7 +222,12 @@ outstanding rather than to history.
 ### Notification — _Phase 7_
 
 `id`, `userId`, `vehicleId?`, `type`, `title`, `body`, `data` (jsonb),
-`dedupeKey`, `readAt?`, `createdAt`.
+`dedupeKey`, `readAt?`, `emailStatus` (`PENDING` | `SENT` | `SKIPPED`),
+`emailedAt?`, `createdAt`.
+
+`emailStatus` makes the table the email outbox: the digest claims `PENDING`
+rows with `FOR UPDATE SKIP LOCKED`, and every sweep asks for a digest for anyone
+still owed one, so a lost job is retried by the next sweep.
 
 Unique `(userId, dedupeKey)`; index `(userId, createdAt DESC)`,
 partial index on unread.
@@ -220,6 +236,15 @@ partial index on unread.
 would otherwise create a duplicate "insurance expires soon" notification every
 hour. The unique constraint makes a repeated insert a no-op, so job retries and
 overlapping workers are safe by construction rather than by careful timing.
+
+### EmailToken — _Phase 7_
+
+`id`, `userId`, `purpose` (`VERIFY_EMAIL` | `RESET_PASSWORD`), `tokenHash`
+(unique, SHA-256), `email`, `expiresAt`, `usedAt?`, `createdAt`. Index
+`(userId, purpose)`.
+
+`email` is the address the link went to; if the account's address has changed
+since, the link is refused. Issuing a new link deletes the unused old one.
 
 ### Document — _Phase 4b_ (expense attachments), extended in Phase 8
 

@@ -9,7 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ApiError } from '@/lib/api/client';
 import { documentKeys, documentsApi } from '@/lib/documents/documents-api';
 import { formatFileSize } from '@/lib/documents/files';
-import { type StoredDocument } from '@/lib/documents/types';
+import { type FileOwner, type StoredDocument } from '@/lib/documents/types';
 import { vehicleKeys } from '@/lib/vehicles/vehicles-api';
 import { AttachmentPicker } from './attachment-picker';
 import { useAttachFiles } from './use-attach-files';
@@ -38,7 +38,8 @@ async function openDocument(document: StoredDocument): Promise<void> {
   }
 }
 
-function AttachmentItem({ document }: { document: StoredDocument }) {
+/** One stored file. `heading`, when given, is shown above the file name — "Registration card". */
+export function AttachmentItem({ document, heading }: { document: StoredDocument; heading?: string }) {
   const queryClient = useQueryClient();
   const [confirming, setConfirming] = useState(false);
 
@@ -61,8 +62,11 @@ function AttachmentItem({ document }: { document: StoredDocument }) {
       <div className="flex min-w-0 items-center gap-2">
         <Icon className="text-muted-foreground size-4 shrink-0" aria-hidden />
         <div className="min-w-0">
-          <p className="truncate text-sm">{document.fileName}</p>
-          <p className="text-muted-foreground text-xs">{formatFileSize(document.sizeBytes)}</p>
+          <p className="truncate text-sm">{heading ?? document.fileName}</p>
+          <p className="text-muted-foreground truncate text-xs">
+            {heading ? `${document.fileName} · ` : ''}
+            {formatFileSize(document.sizeBytes)}
+          </p>
         </div>
       </div>
 
@@ -105,13 +109,25 @@ function AttachmentItem({ document }: { document: StoredDocument }) {
   );
 }
 
-/** An expense's receipts and invoices: view them, remove them, add more. */
-export function AttachmentsPanel({ vehicleId, expenseId }: { vehicleId: string; expenseId: string }) {
+/**
+ * Files kept with something: an expense's receipts and invoices, or a
+ * reminder's papers. View them, remove them, add more.
+ */
+export function AttachmentsPanel({
+  vehicleId,
+  expenseId,
+  reminderId,
+  emptyText = 'No receipt or invoice attached.',
+}: {
+  vehicleId: string;
+  emptyText?: string;
+} & ({ expenseId: string; reminderId?: undefined } | { reminderId: string; expenseId?: undefined })) {
   const { attach, progress, busy } = useAttachFiles(vehicleId);
+  const owner: FileOwner = expenseId ? { expenseId } : { reminderId: reminderId! };
 
   const documents = useQuery({
-    queryKey: documentKeys.forExpense(vehicleId, expenseId),
-    queryFn: () => documentsApi.listForExpense(vehicleId, expenseId),
+    queryKey: documentKeys.forOwner(vehicleId, owner),
+    queryFn: () => documentsApi.listFor(vehicleId, owner),
   });
 
   return (
@@ -134,11 +150,11 @@ export function AttachmentsPanel({ vehicleId, expenseId }: { vehicleId: string; 
           ))}
         </ul>
       ) : (
-        <p className="text-muted-foreground text-sm">No receipt or invoice attached.</p>
+        <p className="text-muted-foreground text-sm">{emptyText}</p>
       )}
 
       <div className="flex flex-wrap items-center gap-3">
-        <AttachmentPicker disabled={busy} onFiles={(files) => void attach(expenseId, files)} />
+        <AttachmentPicker disabled={busy} onFiles={(files) => void attach(owner, files)} />
         {progress ? (
           <p className="text-muted-foreground text-xs tabular-nums" aria-live="polite">
             Uploading {progress.fileName} · {Math.round(progress.fraction * 100)}%

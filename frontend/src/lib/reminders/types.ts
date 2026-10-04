@@ -25,6 +25,8 @@ export interface Reminder {
   repeatEveryMonths: number | null;
   status: ReminderStatus;
   completedAt: string | null;
+  /** Papers kept with it, e.g. the insurance certificate. */
+  attachmentCount: number;
   due: ReminderDue | null;
   createdAt: string;
   updatedAt: string;

@@ -13,6 +13,7 @@ import { RecentExpenses } from '@/features/expenses/recent-expenses';
 import { FuelSummaryCard } from '@/features/fuel/fuel-summary-card';
 import { MaintenanceSummaryCard } from '@/features/maintenance/maintenance-summary-card';
 import { RemindersSummaryCard } from '@/features/reminders/reminders-summary-card';
+import { CarPapersCard } from '@/features/vehicles/car-papers-card';
 import { OdometerTimeline } from '@/features/vehicles/odometer-timeline';
 import { ApiError } from '@/lib/api/client';
 import { formatKm, formatMoney, vehicleSpec, vehicleTitle } from '@/lib/vehicles/format';
@@ -152,6 +153,8 @@ export default function VehicleDetailPage() {
       <MaintenanceSummaryCard vehicleId={data.id} />
 
       <RemindersSummaryCard vehicleId={data.id} />
+
+      <CarPapersCard vehicleId={data.id} />
 
       <FuelSummaryCard vehicleId={data.id} currency={data.currency} />
 

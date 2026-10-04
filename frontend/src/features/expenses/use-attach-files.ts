@@ -6,6 +6,7 @@ import { toast } from 'sonner';
 import { ApiError } from '@/lib/api/client';
 import { attachFile } from '@/lib/documents/documents-api';
 import { attachmentProblem } from '@/lib/documents/files';
+import { type FileOwner } from '@/lib/documents/types';
 import { vehicleKeys } from '@/lib/vehicles/vehicles-api';
 
 export interface UploadProgress {
@@ -25,7 +26,8 @@ export function useAttachFiles(vehicleId: string) {
   const queryClient = useQueryClient();
   const [progress, setProgress] = useState<UploadProgress | null>(null);
 
-  const attach = async (expenseId: string, files: File[]): Promise<void> => {
+  /** `owner` is an expense id, or any other owner (a reminder, the car's papers). */
+  const attach = async (owner: string | FileOwner, files: File[]): Promise<void> => {
     // Checked before anything is sent: a 30 MB video should be refused here,
     // not after it has half-uploaded.
     const accepted: File[] = [];
@@ -40,7 +42,7 @@ export function useAttachFiles(vehicleId: string) {
     for (const file of accepted) {
       setProgress({ fileName: file.name, fraction: 0 });
       try {
-        await attachFile(vehicleId, expenseId, file, (fraction) =>
+        await attachFile(vehicleId, owner, file, (fraction) =>
           setProgress({ fileName: file.name, fraction }),
         );
         attached += 1;

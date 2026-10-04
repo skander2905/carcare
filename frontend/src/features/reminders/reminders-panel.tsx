@@ -1,12 +1,13 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Plus } from 'lucide-react';
+import { Paperclip, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { AttachmentsPanel } from '@/features/expenses/attachments-panel';
 import { StatusBadge } from '@/features/maintenance/status-badge';
 import { ApiError } from '@/lib/api/client';
 import { formatCalendarDate, needsAttention } from '@/lib/maintenance/format';
@@ -48,7 +49,18 @@ export function ReminderRow({ reminder, actions }: { reminder: Reminder; actions
   );
 }
 
-function ReminderActions({ reminder, onEdit }: { reminder: Reminder; onEdit: () => void }) {
+function ReminderActions({
+  reminder,
+  onEdit,
+  onToggleFiles,
+  onNextNeedsFiles,
+}: {
+  reminder: Reminder;
+  onEdit: () => void;
+  onToggleFiles: () => void;
+  /** A repeating reminder that held papers was done: offer to add the new ones to its successor. */
+  onNextNeedsFiles: (nextId: string) => void;
+}) {
   const queryClient = useQueryClient();
   const [confirming, setConfirming] = useState(false);
   const invalidate = () => queryClient.invalidateQueries({ queryKey: vehicleKeys.all });
@@ -58,9 +70,18 @@ function ReminderActions({ reminder, onEdit }: { reminder: Reminder; onEdit: () 
   const complete = useMutation({
     mutationFn: () => remindersApi.complete(reminder.id),
     onSuccess: async ({ next }) => {
-      toast.success(
-        next?.dueDate ? `Done. Next one set for ${formatCalendarDate(next.dueDate)}.` : 'Marked as done',
-      );
+      const message = next?.dueDate
+        ? `Done. Next one set for ${formatCalendarDate(next.dueDate)}.`
+        : 'Marked as done';
+      if (next && reminder.attachmentCount > 0) {
+        // The old certificate stays with the old reminder; the new one goes on the next.
+        toast.success(message, {
+          duration: 10_000,
+          action: { label: 'Add the new one', onClick: () => onNextNeedsFiles(next.id) },
+        });
+      } else {
+        toast.success(message);
+      }
       await invalidate();
     },
     onError: fail('Could not mark that as done.'),
@@ -99,6 +120,15 @@ function ReminderActions({ reminder, onEdit }: { reminder: Reminder; onEdit: () 
 
   return (
     <>
+      <Button
+        size="xs"
+        variant="ghost"
+        aria-label={`Files for ${reminder.title}${reminder.attachmentCount ? `, ${reminder.attachmentCount} attached` : ''}`}
+        onClick={onToggleFiles}
+      >
+        <Paperclip className="size-3.5" aria-hidden />
+        {reminder.attachmentCount > 0 ? reminder.attachmentCount : 'Files'}
+      </Button>
       {reminder.status === 'PENDING' ? (
         <>
           <Button
@@ -137,6 +167,7 @@ export interface RemindersPanelProps {
 export function RemindersPanel({ vehicleId, currentOdometerKm, startAdding = false }: RemindersPanelProps) {
   const [adding, setAdding] = useState(startAdding);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [filesId, setFilesId] = useState<string | null>(null);
   const [showDone, setShowDone] = useState(false);
 
   const reminders = useQuery({
@@ -159,10 +190,28 @@ export function RemindersPanel({ vehicleId, currentOdometerKm, startAdding = fal
         />
       </div>
     ) : (
-      <ReminderRow
-        reminder={reminder}
-        actions={<ReminderActions reminder={reminder} onEdit={() => setEditingId(reminder.id)} />}
-      />
+      <>
+        <ReminderRow
+          reminder={reminder}
+          actions={
+            <ReminderActions
+              reminder={reminder}
+              onEdit={() => setEditingId(reminder.id)}
+              onToggleFiles={() => setFilesId((id) => (id === reminder.id ? null : reminder.id))}
+              onNextNeedsFiles={setFilesId}
+            />
+          }
+        />
+        {filesId === reminder.id ? (
+          <div className="mb-3">
+            <AttachmentsPanel
+              vehicleId={vehicleId}
+              reminderId={reminder.id}
+              emptyText="Nothing kept with it yet. Add the certificate or the contract."
+            />
+          </div>
+        ) : null}
+      </>
     );
 
   return (

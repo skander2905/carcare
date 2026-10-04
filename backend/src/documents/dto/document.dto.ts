@@ -1,6 +1,17 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Transform, Type } from 'class-transformer';
-import { IsEnum, IsIn, IsInt, IsOptional, IsString, IsUUID, Length, Max, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsEnum,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  Length,
+  Max,
+  Min,
+} from 'class-validator';
 import { DocumentStatus, DocumentType } from '../../generated/prisma/enums.js';
 import { type Document } from '../../prisma/model.types.js';
 
@@ -23,6 +34,9 @@ export const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024;
 
 /** Enough for any real receipt trail, few enough that a loop cannot fill a bucket. */
 export const MAX_ATTACHMENTS_PER_EXPENSE = 10;
+/** The same cap for a reminder's papers, and for a car's own (Phase 8). */
+export const MAX_ATTACHMENTS_PER_REMINDER = 10;
+export const MAX_CAR_PAPERS = 50;
 
 const trimmed = Transform(({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim() : value,
@@ -37,7 +51,19 @@ export class RequestUploadDto {
   @IsUUID()
   expenseId?: string;
 
-  @ApiPropertyOptional({ enum: DocumentType, default: DocumentType.RECEIPT })
+  @ApiPropertyOptional({
+    format: 'uuid',
+    description: 'Keep with this reminder, e.g. the insurance certificate. Not together with expenseId.',
+  })
+  @IsOptional()
+  @IsUUID()
+  reminderId?: string;
+
+  @ApiPropertyOptional({
+    enum: DocumentType,
+    default: DocumentType.RECEIPT,
+    description: "With neither expenseId nor reminderId, the file is one of the car's papers.",
+  })
   @IsOptional()
   @IsEnum(DocumentType)
   type?: DocumentType;
@@ -73,6 +99,18 @@ export class ListDocumentsQueryDto {
   @IsUUID()
   expenseId?: string;
 
+  @ApiPropertyOptional({ format: 'uuid' })
+  @IsOptional()
+  @IsUUID()
+  reminderId?: string;
+
+  @ApiPropertyOptional({ description: "Only the car's own papers: files kept with no expense or reminder." })
+  @IsOptional()
+  // A query string is text: "false" must not become true.
+  @Transform(({ value }: { value: unknown }) => (value === 'true' ? true : value === 'false' ? false : value))
+  @IsBoolean()
+  papers?: boolean;
+
   @ApiPropertyOptional({ enum: DocumentType })
   @IsOptional()
   @IsEnum(DocumentType)
@@ -88,6 +126,9 @@ export class DocumentResponse {
 
   @ApiPropertyOptional({ format: 'uuid', nullable: true })
   expenseId: string | null;
+
+  @ApiPropertyOptional({ format: 'uuid', nullable: true })
+  reminderId: string | null;
 
   @ApiProperty({ enum: DocumentType })
   type: DocumentType;
@@ -149,6 +190,7 @@ export function toDocumentResponse(document: Document): DocumentResponse {
     id: document.id,
     vehicleId: document.vehicleId,
     expenseId: document.expenseId,
+    reminderId: document.reminderId,
     type: document.type,
     title: document.title,
     fileName: document.fileName,

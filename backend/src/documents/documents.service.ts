@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   Logger,
@@ -14,6 +15,8 @@ import { purgeObjects } from '../storage/purge.js';
 import { DocumentsRepository } from './documents.repository.js';
 import {
   MAX_ATTACHMENTS_PER_EXPENSE,
+  MAX_ATTACHMENTS_PER_REMINDER,
+  MAX_CAR_PAPERS,
   type ListDocumentsQueryDto,
   type RequestUploadDto,
 } from './dto/document.dto.js';
@@ -45,13 +48,24 @@ export class DocumentsService {
     dto: RequestUploadDto,
   ): Promise<{ document: Document; upload: PresignedUpload }> {
     this.requireStorage();
+    if (dto.expenseId && dto.reminderId) {
+      throw new BadRequestException('A file belongs to an expense or to a reminder, not both');
+    }
+    const limit = dto.expenseId
+      ? MAX_ATTACHMENTS_PER_EXPENSE
+      : dto.reminderId
+        ? MAX_ATTACHMENTS_PER_REMINDER
+        : MAX_CAR_PAPERS;
 
     const outcome = await this.documents.createWithinLimit(
       {
         vehicleId,
         uploadedById: userId,
         expenseId: dto.expenseId ?? null,
-        type: dto.type ?? DocumentType.RECEIPT,
+        reminderId: dto.reminderId ?? null,
+        // A receipt by default when it goes with an expense; otherwise "other"
+        // until the person says what the paper is.
+        type: dto.type ?? (dto.expenseId ? DocumentType.RECEIPT : DocumentType.OTHER),
         title: dto.title ?? defaultTitle(dto.fileName),
         fileName: dto.fileName,
         mimeType: dto.mimeType,
@@ -61,7 +75,7 @@ export class DocumentsService {
         // so knowing a document's id tells you nothing about where it is stored.
         storageKey: `vehicles/${vehicleId}/documents/${randomUUID()}`,
       },
-      MAX_ATTACHMENTS_PER_EXPENSE,
+      limit,
     );
 
     switch (outcome.kind) {
@@ -71,8 +85,16 @@ export class DocumentsService {
         throw new NotFoundException('Expense not found');
       case 'vehicle-missing':
         throw new NotFoundException('Vehicle not found');
+      case 'reminder-missing':
+        throw new NotFoundException('Reminder not found');
       case 'limit-reached':
-        throw new ConflictException(`An expense can have at most ${MAX_ATTACHMENTS_PER_EXPENSE} attachments`);
+        throw new ConflictException(
+          dto.expenseId
+            ? `An expense can have at most ${limit} attachments`
+            : dto.reminderId
+              ? `A reminder can have at most ${limit} files`
+              : `A car can keep at most ${limit} papers`,
+        );
     }
 
     const { document } = outcome;

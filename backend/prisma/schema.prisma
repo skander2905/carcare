@@ -464,6 +464,14 @@ model Document {
   expenseId String?  @db.Uuid
   expense   Expense? @relation(fields: [expenseId], references: [id], onDelete: Cascade)
 
+  /// A paper kept with its reminder: the insurance certificate on "Insurance
+  /// renewal". Goes with the reminder, like a receipt with its expense; the
+  /// reminders service purges the stored files after commit. A document with
+  /// neither link is one of the car's papers (Phase 8). Never both: the
+  /// migration adds the CHECK.
+  reminderId String?   @db.Uuid
+  reminder   Reminder? @relation(fields: [reminderId], references: [id], onDelete: Cascade)
+
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)
 
@@ -471,6 +479,8 @@ model Document {
   @@index([vehicleId, expiresAt])
   /// An expense's attachments, listed with the ledger.
   @@index([expenseId])
+  /// A reminder's files.
+  @@index([reminderId])
   /// For the job that sweeps uploads never confirmed (Phase 7).
   @@index([status, createdAt])
   @@map("documents")
@@ -704,6 +714,9 @@ model Reminder {
 
   status      ReminderStatus @default(PENDING)
   completedAt DateTime?      @db.Timestamptz(3)
+
+  /// Papers kept with it, e.g. the insurance certificate (Phase 8).
+  documents Document[]
 
   createdAt DateTime @default(now()) @db.Timestamptz(3)
   updatedAt DateTime @updatedAt @db.Timestamptz(3)

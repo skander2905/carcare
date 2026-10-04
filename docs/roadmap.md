@@ -3,22 +3,22 @@
 Twelve phases, each independently reviewable and each leaving the repository in
 a working, tested state. Status is updated as phases land.
 
-| Phase | Scope                                                                                                                     | Status  |
-| ----- | ------------------------------------------------------------------------------------------------------------------------- | ------- |
-| 1     | **Foundation** — monorepo, NestJS + Next.js skeletons, config, logging, error handling, health probes, Prisma, Docker, CI | ✅ Done |
-| 2     | **Authentication** — register, login, refresh rotation, logout, guards, rate limiting, protected routes                   | ✅ Done |
-| 3     | **Vehicles** — CRUD, `VehicleMember` access control, odometer timeline                                                    | ✅ Done |
-| 4     | **Expenses** — the cost ledger, categories, filtering, pagination                                                         | ✅ Done |
-| 4b    | **Expense attachments** — optional receipt/invoice photo or PDF on an expense (pulled forward from Phase 8; no OCR)       | ✅ Done |
-| 5     | **Fuel** — entries, full-to-full consumption engine, fuel analytics                                                       | ✅ Done |
-| 6     | **Maintenance** — records, schedules, due/overdue engine                                                                  | ✅ Done |
-| 7     | **Reminders & jobs** — BullMQ queues, worker role, notifications, account emails                                          | ✅ Done |
-| 7b    | **Easier mileage entry** — rethink how the odometer is entered across the forms (requested 2026-10-03; to be scoped)      | ⬜ Next |
-| 8     | **Car papers** — files on reminders, the car's own papers; dates stay on reminders (cut down, ADR-023)                    | ✅ Done |
-| 9     | **Analytics** — dashboard, charts, cost/km, total cost of ownership                                                       | ⬜      |
-| 10    | **Trips** — trip log and estimated trip cost                                                                              | ⬜ Next |
-| 11    | **Testing** — integration coverage, Playwright E2E journeys                                                               | ⬜      |
-| 12    | **Production** — image hardening, deployment, monitoring, docs                                                            | ⬜      |
+| Phase | Scope                                                                                                                     | Status   |
+| ----- | ------------------------------------------------------------------------------------------------------------------------- | -------- |
+| 1     | **Foundation** — monorepo, NestJS + Next.js skeletons, config, logging, error handling, health probes, Prisma, Docker, CI | ✅ Done  |
+| 2     | **Authentication** — register, login, refresh rotation, logout, guards, rate limiting, protected routes                   | ✅ Done  |
+| 3     | **Vehicles** — CRUD, `VehicleMember` access control, odometer timeline                                                    | ✅ Done  |
+| 4     | **Expenses** — the cost ledger, categories, filtering, pagination                                                         | ✅ Done  |
+| 4b    | **Expense attachments** — optional receipt/invoice photo or PDF on an expense (pulled forward from Phase 8; no OCR)       | ✅ Done  |
+| 5     | **Fuel** — entries, full-to-full consumption engine, fuel analytics                                                       | ✅ Done  |
+| 6     | **Maintenance** — records, schedules, due/overdue engine                                                                  | ✅ Done  |
+| 7     | **Reminders & jobs** — BullMQ queues, worker role, notifications, account emails                                          | ✅ Done  |
+| 7b    | **Easier mileage entry** — rethink how the odometer is entered across the forms (requested 2026-10-03; to be scoped)      | ⬜ Next  |
+| 8     | **Car papers** — files on reminders, the car's own papers; dates stay on reminders (cut down, ADR-023)                    | ✅ Done  |
+| 9     | **Analytics** — dashboard, charts, cost/km, total cost of ownership                                                       | ⬜       |
+| 10    | **Trips** — trip log and estimated trip cost                                                                              | ⬜ Next  |
+| 11    | **Testing** — integration coverage, Playwright E2E journeys                                                               | ⬜       |
+| 12    | **Going online** — Vercel + Render + Neon + R2, free (ADR-024; moved ahead of 9 and 10). Email later                      | 🟡 Ready |
 
 Testing is not deferred to Phase 11. Every phase ships its own unit and
 integration tests; Phase 11 adds the end-to-end journeys and closes coverage
@@ -495,6 +495,30 @@ deleted through the API, purging its files, then the account.
 
 **Not built:** expiry dates on documents and their alerts (dates stay on
 reminders), and a separate documents page.
+
+## Phase 12 — going online — ready to deploy
+
+Moved ahead of Trips and Analytics at Skander's request. All free, for him and
+a few friends (ADR-024). The steps he follows are in `docs/deploy.md`.
+
+- `render.yaml`: the API and worker as one free Docker service in Frankfurt,
+  migrations at start-up, and a free Key Value queue (`noeviction`).
+- The website forwards `/api` and `/health` to it (`API_PROXY_TARGET`) and
+  calls its own address (`NEXT_PUBLIC_API_URL=same-origin`).
+- `TRUST_PROXY` is a hop count; online it is 2.
+- A scheduled GitHub Action keeps the free server awake.
+- `GET /api/v1/features` says whether email and file storage work; the app
+  hides the confirmation banner and "forgot password" when email is off.
+
+**Found while preparing.** Render's free plan blocks outgoing email ports
+(25, 465, 587) since September 2025, so the Gmail plan from Phase 7 cannot run
+there. Email is off online until a Gmail-API mailer or a paid plan.
+
+**Verified locally** with a production build in the online shape (port 3002,
+same-origin, rewrites to the API): the forwarded routes answered, a new
+account signed up, and a full reload stayed signed in through the rewrite.
+**Not verified:** the real Vercel, Render, Neon and R2 accounts — those are
+created by Skander following the guide.
 
 ## Deferred by design
 

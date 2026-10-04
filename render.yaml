@@ -6,7 +6,7 @@
 #   so the hourly reminder sweep and the 08:00 email digests still run.
 # - Render Key Value (Redis) for BullMQ. `noeviction` is required: BullMQ
 #   loses jobs if Redis evicts keys under memory pressure.
-# - The database (Neon) and file storage (Cloudflare R2) live elsewhere; their secrets are typed into the dashboard (`sync: false`),
+# - The database (Neon) and file storage (Backblaze B2) live elsewhere; their secrets are typed into the dashboard (`sync: false`),
 #   never written here — this repository is public.
 
 services:
@@ -55,8 +55,9 @@ services:
         sync: false
       - key: S3_ENDPOINT
         sync: false
+      # The bucket's region, e.g. eu-central-003 for Backblaze B2 in Amsterdam.
       - key: S3_REGION
-        value: auto
+        sync: false
       - key: S3_BUCKET
         sync: false
       - key: S3_ACCESS_KEY_ID

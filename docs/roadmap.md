@@ -18,7 +18,7 @@ a working, tested state. Status is updated as phases land.
 | 9     | **Analytics** — dashboard, charts, cost/km, total cost of ownership                                                       | ⬜       |
 | 10    | **Trips** — trip log and estimated trip cost                                                                              | ⬜ Next  |
 | 11    | **Testing** — integration coverage, Playwright E2E journeys                                                               | ⬜       |
-| 12    | **Going online** — Vercel + Render + Neon + R2, free (ADR-024; moved ahead of 9 and 10). Email later                      | 🟡 Ready |
+| 12    | **Going online** — Vercel + Render + Neon + B2, free (ADR-024; moved ahead of 9 and 10). Email later                      | 🟡 Ready |
 
 Testing is not deferred to Phase 11. Every phase ships its own unit and
 integration tests; Phase 11 adds the end-to-end journeys and closes coverage
@@ -517,7 +517,7 @@ there. Email is off online until a Gmail-API mailer or a paid plan.
 **Verified locally** with a production build in the online shape (port 3002,
 same-origin, rewrites to the API): the forwarded routes answered, a new
 account signed up, and a full reload stayed signed in through the rewrite.
-**Not verified:** the real Vercel, Render, Neon and R2 accounts — those are
+**Not verified:** the real Vercel, Render, Neon and B2 accounts — those are
 created by Skander following the guide.
 
 ## Deferred by design

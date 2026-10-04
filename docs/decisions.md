@@ -699,7 +699,7 @@ scheduled GitHub Action (free on a public repository) pings `/health/live`
 every 10 minutes and the hourly sweep keeps running. Migrations run at
 start-up because free services have no pre-deploy step. Redis is Render's free
 Key Value (`noeviction`, as BullMQ requires; not persisted, which the outbox
-design tolerates). Postgres is Neon, files Cloudflare R2.
+design tolerates). Postgres is Neon, files Backblaze B2 (Cloudflare R2 needs a card, which Skander does not have; B2's CORS for uploads is set by `infrastructure/b2-allow-uploads.mjs`, since its web UI only allows downloads).
 
 **Decision — no email yet.** Render's free plan blocks SMTP ports since
 September 2025. Rather than a mail path that fails silently, the server

@@ -17,7 +17,7 @@ export function SiteHeader() {
 
         <nav className="flex items-center gap-1">
           <Button variant="ghost" size="sm" asChild>
-            <a href={`${env.apiOrigin}/api/docs`} target="_blank" rel="noreferrer">
+            <a href={`${env.apiOrigin}/api/docs`} target="_blank" rel="noreferrer" suppressHydrationWarning>
               API docs
             </a>
           </Button>

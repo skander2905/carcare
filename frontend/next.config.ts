@@ -12,6 +12,10 @@ const nextConfig: NextConfig = {
 
   reactStrictMode: true,
 
+  /* Lets a phone on the same network open the dev server, e.g.
+     http://192.168.1.28:3000. Development only; Next ignores it in production. */
+  allowedDevOrigins: ['192.168.*.*', '10.*.*.*', '*.local'],
+
   /* Do not leak framework details in response headers. */
   poweredByHeader: false,
 };

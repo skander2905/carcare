@@ -27,7 +27,29 @@ if (!parsed.success) {
   );
 }
 
-const origin = parsed.data.NEXT_PUBLIC_API_URL.replace(/\/+$/, '');
+const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
+
+/**
+ * The API's origin as this page should reach it.
+ *
+ * In development the API is configured as `localhost`, which on a phone
+ * opening the app at `http://192.168.1.28:3000` is the phone itself. When the
+ * configured host is local and the page was opened at another host, the
+ * page's host is used with the configured port — the API runs on the same
+ * machine as the web app. A real API domain is never rewritten.
+ */
+export function resolveApiOrigin(configured: string, pageHostname: string | undefined): string {
+  const url = new URL(configured);
+  if (pageHostname && LOCAL_HOSTS.has(url.hostname) && !LOCAL_HOSTS.has(pageHostname)) {
+    url.hostname = pageHostname;
+  }
+  return url.origin;
+}
+
+const origin = resolveApiOrigin(
+  parsed.data.NEXT_PUBLIC_API_URL,
+  typeof window === 'undefined' ? undefined : window.location.hostname,
+);
 
 export const env = {
   /** e.g. http://localhost:3001 */

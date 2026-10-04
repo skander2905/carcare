@@ -10,7 +10,8 @@ import { z } from 'zod';
 const publicEnvSchema = z.object({
   /** Origin only. The versioned prefix is appended by the API client, and the
       health probes deliberately sit outside it. */
-  NEXT_PUBLIC_API_URL: z.url().default('http://localhost:3001'),
+  /** An absolute URL, or `same-origin` when this site forwards `/api` to the API (online). */
+  NEXT_PUBLIC_API_URL: z.union([z.literal('same-origin'), z.url()]).default('http://localhost:3001'),
   NEXT_PUBLIC_APP_NAME: z.string().default('CarCare'),
 });
 
@@ -38,7 +39,13 @@ const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
  * page's host is used with the configured port — the API runs on the same
  * machine as the web app. A real API domain is never rewritten.
  */
-export function resolveApiOrigin(configured: string, pageHostname: string | undefined): string {
+export function resolveApiOrigin(
+  configured: string,
+  pageHostname: string | undefined,
+  pageOrigin?: string,
+): string {
+  // Online: the API is reached through this site's own address.
+  if (configured === 'same-origin') return pageOrigin ?? '';
   const url = new URL(configured);
   if (pageHostname && LOCAL_HOSTS.has(url.hostname) && !LOCAL_HOSTS.has(pageHostname)) {
     url.hostname = pageHostname;
@@ -49,6 +56,7 @@ export function resolveApiOrigin(configured: string, pageHostname: string | unde
 const origin = resolveApiOrigin(
   parsed.data.NEXT_PUBLIC_API_URL,
   typeof window === 'undefined' ? undefined : window.location.hostname,
+  typeof window === 'undefined' ? undefined : window.location.origin,
 );
 
 export const env = {

@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useServerFeatures } from '@/lib/meta/use-server-features';
 import { authErrorMessage } from './auth-error';
 import { AuthFormShell } from './auth-form-shell';
 import { FormField } from './form-field';
@@ -50,6 +51,7 @@ export function safeNext(raw: string | null, origin?: string): string {
 }
 
 export function LoginForm() {
+  const features = useServerFeatures();
   const { login } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -108,11 +110,13 @@ export function LoginForm() {
           error={errors.password?.message}
           {...register('password')}
         />
-        <p className="-mt-2 text-right text-sm">
-          <Link href="/forgot-password" className="text-muted-foreground underline underline-offset-4">
-            Forgot your password?
-          </Link>
-        </p>
+        {features?.email ? (
+          <p className="-mt-2 text-right text-sm">
+            <Link href="/forgot-password" className="text-muted-foreground underline underline-offset-4">
+              Forgot your password?
+            </Link>
+          </p>
+        ) : null}
 
         {(formError ?? callbackError) ? (
           // role="alert" so the failure is announced, not merely displayed.

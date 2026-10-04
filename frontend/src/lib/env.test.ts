@@ -14,4 +14,12 @@ describe('resolveApiOrigin', () => {
   it('never rewrites a real API domain', () => {
     expect(resolveApiOrigin('https://api.carcare.tn', 'carcare.vercel.app')).toBe('https://api.carcare.tn');
   });
+
+  it("uses the page's own address when the site forwards /api (online)", () => {
+    expect(resolveApiOrigin('same-origin', 'carcare.vercel.app', 'https://carcare.vercel.app')).toBe(
+      'https://carcare.vercel.app',
+    );
+    // On the server there is no page; links are relative, and only the browser calls the API.
+    expect(resolveApiOrigin('same-origin', undefined, undefined)).toBe('');
+  });
 });

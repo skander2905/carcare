@@ -7,10 +7,12 @@ import { Button } from '@/components/ui/button';
 import { useAuth } from '@/features/auth/use-auth';
 import { ApiError } from '@/lib/api/client';
 import { accountEmailApi } from '@/lib/auth/account-email-api';
+import { useServerFeatures } from '@/lib/meta/use-server-features';
 
 /** Shown until the address is confirmed: without it, reminder emails quietly never arrive. */
 export function VerifyEmailBanner() {
   const { user } = useAuth();
+  const features = useServerFeatures();
   const resend = useMutation({
     mutationFn: accountEmailApi.resendVerification,
     onSuccess: () => toast.success(`Sent. Check ${user?.email ?? 'your inbox'}, and the spam folder.`),
@@ -18,7 +20,8 @@ export function VerifyEmailBanner() {
       toast.error(error instanceof ApiError ? error.message : 'Could not send it. Try again later.'),
   });
 
-  if (!user || user.emailVerified) return null;
+  // Nothing to confirm with when the server cannot send email.
+  if (!user || user.emailVerified || !features?.email) return null;
 
   return (
     <div className="border-warning/30 bg-warning/10 border-b">

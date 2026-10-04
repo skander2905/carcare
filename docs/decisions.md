@@ -677,3 +677,37 @@ reminder they explain).
 
 **Consequences.** `issuedAt` and `expiresAt` stay in the table, unused, rather
 than a migration to drop them for nothing. No new notification type.
+
+## ADR-024 — Online for free: one address, one process, no email yet
+
+**Context.** Skander wants CarCare online before Trips and Analytics, at no
+cost, for himself and a few friends. The website and the API are separate
+deployables; free hosting splits them across providers.
+
+**Decision — one address.** Vercel serves the website and forwards `/api/*`
+and `/health*` to the API on Render (Next.js rewrites, `API_PROXY_TARGET`). The
+browser sees a single origin (`NEXT_PUBLIC_API_URL=same-origin`), so the
+refresh cookie is first-party — Safari drops third-party cookies, and
+`*.vercel.app` is a public suffix, so a second subdomain would be a second
+site — and no CORS is needed. The proxy chain is two hops, so `TRUST_PROXY`
+became a hop count (`2`) rather than a boolean; trusting every hop would let a
+caller pick their own IP for rate limiting.
+
+**Decision — one process.** Render's free web service runs `APP_ROLE=all`;
+a free background worker does not exist. It sleeps after 15 idle minutes, so a
+scheduled GitHub Action (free on a public repository) pings `/health/live`
+every 10 minutes and the hourly sweep keeps running. Migrations run at
+start-up because free services have no pre-deploy step. Redis is Render's free
+Key Value (`noeviction`, as BullMQ requires; not persisted, which the outbox
+design tolerates). Postgres is Neon, files Cloudflare R2.
+
+**Decision — no email yet.** Render's free plan blocks SMTP ports since
+September 2025. Rather than a mail path that fails silently, the server
+reports `GET /api/v1/features` and the web app hides what would need email —
+the confirmation banner, "forgot password" — and says reminders arrive in the
+app only. Turning email on later is a Gmail-API mailer or Render's paid plan
+(docs/deploy.md).
+
+**Consequences.** Four free accounts to look after. Cold starts if the
+keep-awake job stops. Verified locally with a production build at the same
+shape: sign-up and a full reload stayed signed in through the rewrite.

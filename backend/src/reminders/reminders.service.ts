@@ -1,14 +1,24 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { type ReminderStatus } from '../generated/prisma/enums.js';
 import { type PointDueState, URGENCY, addMonths, dueAt } from '../maintenance/domain/due.js';
 import { type PrismaLike } from '../odometer/odometer.repository.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { type Reminder } from '../prisma/model.types.js';
+import { ObjectStorage } from '../storage/object-storage.js';
+import { purgeObjects } from '../storage/purge.js';
 import { type CreateReminderDto, type UpdateReminderDto } from './dto/reminders.dto.js';
 import { RemindersRepository } from './reminders.repository.js';
 
 export interface ReminderWithDue {
   reminder: Reminder;
+  /** Papers kept with it, ready to open. */
+  attachmentCount: number;
   /** Derived on every read, like a schedule's. Null once completed: it is no longer due. */
   due: PointDueState | null;
 }
@@ -29,9 +39,12 @@ export interface Completion {
  */
 @Injectable()
 export class RemindersService {
+  private readonly logger = new Logger(RemindersService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly reminders: RemindersRepository,
+    private readonly storage: ObjectStorage,
   ) {}
 
   /** Pending first, most urgent first; completed after, most recently done first. */
@@ -142,10 +155,18 @@ export class RemindersService {
     });
   }
 
+  /** Its files go with it: rows by cascade, stored objects after the commit. */
   async remove(vehicleId: string, id: string): Promise<void> {
-    const reminder = await this.reminders.findInVehicle(this.prisma, id, vehicleId);
-    if (!reminder) throw new NotFoundException('Reminder not found');
-    await this.reminders.delete(this.prisma, id);
+    const keys = await this.prisma.$transaction(async (tx) => {
+      // Locked, so an upload to this reminder cannot slip in after the keys are read.
+      const reminder = await this.reminders.lock(tx, id, vehicleId);
+      if (!reminder) throw new NotFoundException('Reminder not found');
+      const files = await tx.document.findMany({ where: { reminderId: id }, select: { storageKey: true } });
+      await this.reminders.delete(tx, id);
+      return files.map((f) => f.storageKey);
+    });
+    // After the commit, never inside it: see purgeObjects.
+    await purgeObjects(this.storage, keys, this.logger);
   }
 
   /** Every pending reminder of a car with its due state, for the sweep. */
@@ -160,14 +181,23 @@ export class RemindersService {
     now = new Date(),
   ): Promise<ReminderWithDue[]> {
     if (reminders.length === 0) return [];
-    const vehicle = await client.vehicle.findUniqueOrThrow({
-      where: { id: vehicleId },
-      // The owner's calendar, as for schedules (ADR-019).
-      select: { currentOdometerKm: true, owner: { select: { timezone: true } } },
-    });
+    const [vehicle, counts] = await Promise.all([
+      client.vehicle.findUniqueOrThrow({
+        where: { id: vehicleId },
+        // The owner's calendar, as for schedules (ADR-019).
+        select: { currentOdometerKm: true, owner: { select: { timezone: true } } },
+      }),
+      client.document.groupBy({
+        by: ['reminderId'],
+        where: { reminderId: { in: reminders.map((r) => r.id) }, status: 'READY' },
+        _count: { _all: true },
+      }),
+    ]);
+    const attachments = new Map(counts.map((c) => [c.reminderId, c._count._all]));
 
     return reminders.map((reminder) => ({
       reminder,
+      attachmentCount: attachments.get(reminder.id) ?? 0,
       due:
         reminder.status === 'COMPLETED'
           ? null

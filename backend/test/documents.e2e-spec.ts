@@ -93,6 +93,119 @@ describe('Documents (e2e)', () => {
     await app?.close();
   });
 
+  describe("a car's papers and a reminder's files (Phase 8)", () => {
+    const certificate = { fileName: 'carte-grise.pdf', mimeType: 'application/pdf', sizeBytes: 400_000 };
+
+    /** Signs, "uploads" and confirms a file with whatever owner the body names. */
+    const keep = async (body: Record<string, unknown>): Promise<string> => {
+      const { body: started } = (await me()
+        .post(`/vehicles/${vehicleId}/documents/upload-url`)
+        .send({ ...certificate, ...body })
+        .expect(201)) as { body: UploadBody };
+      storage.put(await keyOf(started.document.id));
+      await me().post(`/documents/${started.document.id}/confirm`).expect(200);
+      return started.document.id;
+    };
+
+    const reminder = async (): Promise<string> =>
+      (
+        (
+          await me()
+            .post(`/vehicles/${vehicleId}/reminders`)
+            .send({
+              type: 'INSURANCE',
+              title: 'Insurance renewal',
+              dueDate: '2027-03-01',
+              repeatEveryMonths: 12,
+            })
+            .expect(201)
+        ).body as { id: string }
+      ).id;
+
+    it('keeps a paper with no expense or reminder, typed "other" unless told', async () => {
+      const untyped = await keep({});
+      const registration = await keep({ type: 'REGISTRATION', title: 'Carte grise' });
+      await attach(); // a receipt on the expense, which is not a paper
+
+      const { body } = await me().get(`/vehicles/${vehicleId}/documents?papers=true`).expect(200);
+      const papers = body as {
+        id: string;
+        type: string;
+        expenseId: string | null;
+        reminderId: string | null;
+      }[];
+      expect(papers.map((p) => p.id).sort()).toEqual([untyped, registration].sort());
+      expect(papers.find((p) => p.id === untyped)).toMatchObject({
+        type: 'OTHER',
+        expenseId: null,
+        reminderId: null,
+      });
+      expect(papers.find((p) => p.id === registration)?.type).toBe('REGISTRATION');
+    });
+
+    it('keeps files with a reminder, and counts them on it', async () => {
+      const id = await reminder();
+      const file = await keep({ reminderId: id, type: 'INSURANCE' });
+
+      const { body } = await me().get(`/vehicles/${vehicleId}/documents?reminderId=${id}`).expect(200);
+      expect((body as { id: string }[]).map((d) => d.id)).toEqual([file]);
+      const { body: listed } = await me().get(`/reminders/${id}`).expect(200);
+      expect((listed as { attachmentCount: number }).attachmentCount).toBe(1);
+      // Not one of the car's papers.
+      const { body: papers } = await me().get(`/vehicles/${vehicleId}/documents?papers=true`).expect(200);
+      expect(papers).toEqual([]);
+    });
+
+    it('refuses a file for both an expense and a reminder', async () => {
+      const id = await reminder();
+      await me()
+        .post(`/vehicles/${vehicleId}/documents/upload-url`)
+        .send({ ...certificate, expenseId, reminderId: id })
+        .expect(400);
+    });
+
+    it("answers 404 for a reminder on someone else's car", async () => {
+      const theirs = await reminder();
+      const other = await register('other@example.com');
+      const theirCar = await as(other.accessToken)
+        .post('/vehicles')
+        .send({ make: 'Kia', model: 'Rio', year: 2021, licensePlate: '1 TUN 1', fuelType: 'PETROL' })
+        .expect(201);
+      await as(other.accessToken)
+        .post(`/vehicles/${theirCar.body.id}/documents/upload-url`)
+        .send({ ...certificate, reminderId: theirs })
+        .expect(404);
+    });
+
+    it("deletes a reminder's files with it, rows and stored objects", async () => {
+      const id = await reminder();
+      const file = await keep({ reminderId: id });
+      const key = await keyOf(file);
+
+      await me().delete(`/reminders/${id}`).expect(204);
+      expect(await prisma.document.findUnique({ where: { id: file } })).toBeNull();
+      expect(storage.deleted).toContain(key);
+    });
+
+    it('keeps the old certificate on a completed reminder, and starts the next one empty', async () => {
+      const id = await reminder();
+      await keep({ reminderId: id });
+      const { body } = await me().post(`/reminders/${id}/complete`).expect(200);
+      const { completed, next } = body as {
+        completed: { attachmentCount: number };
+        next: { attachmentCount: number };
+      };
+      expect(completed.attachmentCount).toBe(1);
+      expect(next.attachmentCount).toBe(0);
+    });
+
+    it('refuses a database row that names two owners', async () => {
+      const id = await reminder();
+      const file = await keep({ reminderId: id });
+      await expect(prisma.document.update({ where: { id: file }, data: { expenseId } })).rejects.toThrow();
+    });
+  });
+
   describe('starting an upload', () => {
     it('creates a pending document and a URL signed for its type', async () => {
       const { body } = (await requestUpload().expect(201)) as { body: UploadBody };

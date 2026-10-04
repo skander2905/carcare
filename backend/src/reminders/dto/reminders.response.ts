@@ -74,6 +74,9 @@ export class ReminderResponse {
   @ApiPropertyOptional({ nullable: true })
   completedAt: string | null;
 
+  @ApiProperty({ example: 1, description: 'Papers kept with it, e.g. the insurance certificate.' })
+  attachmentCount: number;
+
   @ApiPropertyOptional({
     type: ReminderDueResponse,
     nullable: true,
@@ -88,7 +91,7 @@ export class ReminderResponse {
   updatedAt: string;
 }
 
-export function toReminderResponse({ reminder, due }: ReminderWithDue): ReminderResponse {
+export function toReminderResponse({ reminder, due, attachmentCount }: ReminderWithDue): ReminderResponse {
   return {
     id: reminder.id,
     vehicleId: reminder.vehicleId,
@@ -102,6 +105,7 @@ export function toReminderResponse({ reminder, due }: ReminderWithDue): Reminder
     repeatEveryMonths: reminder.repeatEveryMonths,
     status: reminder.status,
     completedAt: reminder.completedAt?.toISOString() ?? null,
+    attachmentCount,
     due,
     createdAt: reminder.createdAt.toISOString(),
     updatedAt: reminder.updatedAt.toISOString(),

@@ -14,9 +14,9 @@ a working, tested state. Status is updated as phases land.
 | 6     | **Maintenance** — records, schedules, due/overdue engine                                                                  | ✅ Done |
 | 7     | **Reminders & jobs** — BullMQ queues, worker role, notifications, account emails                                          | ✅ Done |
 | 7b    | **Easier mileage entry** — rethink how the odometer is entered across the forms (requested 2026-10-03; to be scoped)      | ⬜ Next |
-| 8     | **Documents** — expiry tracking, vehicle-level documents (upload/download landed in 4b)                                   | ⬜ Next |
+| 8     | **Car papers** — files on reminders, the car's own papers; dates stay on reminders (cut down, ADR-023)                    | ✅ Done |
 | 9     | **Analytics** — dashboard, charts, cost/km, total cost of ownership                                                       | ⬜      |
-| 10    | **Trips** — trip log and estimated trip cost                                                                              | ⬜      |
+| 10    | **Trips** — trip log and estimated trip cost                                                                              | ⬜ Next |
 | 11    | **Testing** — integration coverage, Playwright E2E journeys                                                               | ⬜      |
 | 12    | **Production** — image hardening, deployment, monitoring, docs                                                            | ⬜      |
 
@@ -471,6 +471,30 @@ the box in the fuel form, a fill-up saved from the trip counter, the photo
 button on a drawn dashboard, and the box on the other three forms. The account
 and its car were deleted afterwards. **Not verified:** a real photo of a real
 dashboard, and the layout on a phone screen (the browser pane was hidden).
+
+## Phase 8 — car papers (cut down) — delivered
+
+Planned as a documents section with its own expiry dates. Skander questioned
+the need: reminders already carry dates. Cut to what reminders lacked (ADR-023).
+
+- **Files on reminders.** The insurance certificate kept on "Insurance
+  renewal". Done on a repeating reminder keeps the old file and offers "Add
+  the new one" on the next.
+- **Car papers.** Registration card, insurance or inspection certificate,
+  purchase papers: files with no expense or reminder, listed on the car page
+  and typed by a chip.
+- `Document.reminderId` with a CHECK against having two owners; uploads lock
+  their owner, so the limits (10 per expense or reminder, 50 papers per car)
+  hold under concurrency; deleting a reminder purges its files after commit.
+- 7 integration tests.
+
+**Verified in the running app** with a throwaway account: a paper uploaded to
+MinIO and listed as "Registration card"; a certificate kept on a reminder,
+counted, and "Add the new one" opening next year's reminder. The car was
+deleted through the API, purging its files, then the account.
+
+**Not built:** expiry dates on documents and their alerts (dates stay on
+reminders), and a separate documents page.
 
 ## Deferred by design
 

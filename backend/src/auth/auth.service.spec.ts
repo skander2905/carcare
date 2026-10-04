@@ -8,6 +8,7 @@ import { AuthService, type SessionContext } from './auth.service.js';
 import { hashPassword } from './domain/password.js';
 import { hashToken } from './domain/tokens.js';
 import { type RefreshTokenRepository } from './refresh-token.repository.js';
+import { type AccountEmailService } from './account-email/account-email.service.js';
 
 const CONTEXT: SessionContext = { userAgent: 'vitest', ipAddress: '127.0.0.1' };
 const PASSWORD = 'correct horse battery staple';
@@ -35,6 +36,8 @@ function buildUser(overrides: Partial<User> = {}): User {
     currency: 'TND',
     locale: 'en',
     timezone: 'Africa/Tunis',
+    emailNotifications: true,
+    emailVerifiedAt: null,
     createdAt: new Date('2026-09-01T00:00:00.000Z'),
     updatedAt: new Date('2026-09-01T00:00:00.000Z'),
     ...overrides,
@@ -88,6 +91,7 @@ const buildMocks = () => ({
 describe('AuthService', () => {
   let users: ReturnType<typeof buildMocks>['users'];
   let refreshTokens: ReturnType<typeof buildMocks>['refreshTokens'];
+  const accountEmail = { sendVerification: vi.fn().mockResolvedValue(undefined) };
   let jwt: ReturnType<typeof buildMocks>['jwt'];
   let service: AuthService;
   let loggerWarn: ReturnType<typeof vi.spyOn>;
@@ -110,6 +114,7 @@ describe('AuthService', () => {
     service = new AuthService(
       users as unknown as UsersService,
       refreshTokens as unknown as RefreshTokenRepository,
+      accountEmail as unknown as AccountEmailService,
       jwt as unknown as JwtService,
       AUTH_CONFIG,
     );

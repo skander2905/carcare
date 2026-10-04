@@ -65,6 +65,13 @@ pin('AUTH_RATE_LIMIT_ENABLED', 'false');
 pin('S3_ACCESS_KEY_ID', '');
 pin('S3_SECRET_ACCESS_KEY', '');
 
+/*
+ * No mail server either, for the same reason: a developer whose .env points at
+ * Mailpit would otherwise send mail from the suite. Suites that test email
+ * substitute an outbox through createTestApp.
+ */
+pin('SMTP_HOST', '');
+
 if (!process.env.DATABASE_URL) {
   throw new Error(
     'DATABASE_URL is not set. Integration tests need a real database — run `docker compose up -d db redis` first.',

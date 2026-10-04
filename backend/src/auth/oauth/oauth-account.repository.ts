@@ -50,6 +50,8 @@ export class OAuthAccountRepository {
     return this.prisma.user.create({
       data: {
         ...user,
+        // The provider only hands over an address it has verified (ADR-017).
+        emailVerifiedAt: new Date(),
         // No passwordHash: this account has never had one.
         oauthAccounts: { create: account },
       },

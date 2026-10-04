@@ -13,6 +13,7 @@ export interface UpdateUserData {
   currency?: string;
   locale?: string;
   timezone?: string;
+  emailNotifications?: boolean;
 }
 
 /**

@@ -5,18 +5,43 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { Logger as PinoNestLogger } from 'nestjs-pino';
-import { AppModule } from './app.module.js';
+import { config as loadEnvFiles } from 'dotenv';
+import { AppModule, AppWithWorkerModule } from './app.module.js';
 import { ApiErrorResponse } from './common/http/api-error.js';
 import { buildCorsOptions } from './common/http/cors.js';
 import { notFoundHandler } from './common/http/not-found.handler.js';
-import { appConfig, httpConfig, swaggerConfig } from './config/configuration.js';
+import { appConfig, httpConfig, loadEnv, swaggerConfig } from './config/configuration.js';
+import { envFilePaths } from './config/env-files.js';
 import { type AppConfig, type HttpConfig, type SwaggerConfig } from './config/config.types.js';
 
 /** Reject oversized bodies before they are parsed. Documents go to S3, not here. */
 const BODY_LIMIT = '1mb';
 
-async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+/**
+ * One image, three roles (architecture.md §2). The role picks the module graph
+ * before Nest starts, so it is read straight from the environment — the same
+ * files ConfigModule will read, real variables still winning.
+ */
+async function main(): Promise<void> {
+  loadEnvFiles({ path: envFilePaths(), quiet: true });
+  const role = loadEnv().APP_ROLE;
+
+  if (role === 'worker') await bootstrapWorker();
+  else await bootstrap(role === 'all');
+}
+
+/** Queues only: no HTTP port, nothing to route. */
+async function bootstrapWorker(): Promise<void> {
+  const app = await NestFactory.createApplicationContext(AppWithWorkerModule, { bufferLogs: true });
+  app.useLogger(app.get(PinoNestLogger));
+  // SIGTERM lets the BullMQ workers finish the job in hand before exiting.
+  app.enableShutdownHooks();
+  await app.init();
+  new Logger('Bootstrap').log('CarCare worker started (role=worker)');
+}
+
+async function bootstrap(withWorker: boolean): Promise<void> {
+  const app = await NestFactory.create<NestExpressApplication>(withWorker ? AppWithWorkerModule : AppModule, {
     // Hold startup logs until the Pino logger is installed, so boot output is
     // structured too rather than a mix of two formats.
     bufferLogs: true,
@@ -96,4 +121,4 @@ async function bootstrap(): Promise<void> {
   }
 }
 
-await bootstrap();
+await main();

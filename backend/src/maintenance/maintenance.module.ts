@@ -24,5 +24,7 @@ import { VehicleMaintenanceController } from './vehicle-maintenance.controller.j
     MaintenanceRecordAccessGuard,
     MaintenanceScheduleAccessGuard,
   ],
+  // The reminder sweep reads every active schedule's due state from here (Phase 7).
+  exports: [SchedulesService],
 })
 export class MaintenanceModule {}

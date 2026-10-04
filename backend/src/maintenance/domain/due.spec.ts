@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { type ScheduleTerms, addMonths, byUrgency, calendarDate, daysBetween, dueState } from './due.js';
+import {
+  type DuePoint,
+  type ScheduleTerms,
+  addMonths,
+  byUrgency,
+  calendarDate,
+  daysBetween,
+  dueAt,
+  dueState,
+} from './due.js';
 
 const TUNIS = 'Africa/Tunis';
 const NOW = new Date('2026-09-30T10:00:00Z');
@@ -127,6 +136,56 @@ describe('dueState', () => {
       timeZone: TUNIS,
     });
     expect(state.time).toMatchObject({ lastDate: '2026-09-01', dueDate: '2026-10-01', remainingDays: 0 });
+  });
+});
+
+describe('dueAt', () => {
+  // NOW is 30 September in Tunis.
+  const renewal: DuePoint = {
+    dueAtKm: null,
+    dueDate: '2026-10-15',
+    notifyBeforeKm: 1000,
+    notifyBeforeDays: 30,
+  };
+  const context = { currentOdometerKm: 120_000, now: NOW, timeZone: TUNIS };
+
+  it('classifies a fixed date with the same windows as a schedule', () => {
+    expect(dueAt({ ...renewal, dueDate: '2026-12-01' }, context).status).toBe('UPCOMING');
+    expect(dueAt(renewal, context)).toEqual({
+      status: 'DUE_SOON',
+      km: null,
+      time: { dueDate: '2026-10-15', remainingDays: 15, status: 'DUE_SOON' },
+    });
+    expect(dueAt({ ...renewal, dueDate: '2026-09-30' }, context).time).toMatchObject({
+      remainingDays: 0,
+      status: 'DUE',
+    });
+    // One window past the date: 30 days.
+    expect(dueAt({ ...renewal, dueDate: '2026-08-31' }, context).status).toBe('OVERDUE');
+    expect(dueAt({ ...renewal, dueDate: '2026-09-01' }, context).status).toBe('DUE');
+  });
+
+  it('classifies a fixed mileage, and takes whichever comes first', () => {
+    const warranty: DuePoint = { ...renewal, dueDate: '2027-06-01', dueAtKm: 120_500 };
+    expect(dueAt(warranty, context)).toMatchObject({
+      status: 'DUE_SOON',
+      km: { dueAtKm: 120_500, remainingKm: 500, status: 'DUE_SOON' },
+      time: { status: 'UPCOMING' },
+    });
+  });
+
+  it("counts days on the owner's calendar", () => {
+    // 23:30 UTC on 30 September is already 1 October in Tunis.
+    const late = { ...context, now: new Date('2026-09-30T23:30:00Z') };
+    expect(dueAt({ ...renewal, dueDate: '2026-10-01' }, late).time).toMatchObject({ remainingDays: 0 });
+  });
+
+  it('is UNKNOWN with no due point at all', () => {
+    expect(dueAt({ ...renewal, dueDate: null }, context)).toEqual({
+      status: 'UNKNOWN',
+      km: null,
+      time: null,
+    });
   });
 });
 

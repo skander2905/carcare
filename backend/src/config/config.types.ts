@@ -5,6 +5,7 @@ import type {
   databaseConfig,
   httpConfig,
   loggingConfig,
+  mailConfig,
   oauthConfig,
   redisConfig,
   storageConfig,
@@ -26,3 +27,4 @@ export type OAuthConfig = ConfigType<typeof oauthConfig>;
 export type LoggingConfig = ConfigType<typeof loggingConfig>;
 export type SwaggerConfig = ConfigType<typeof swaggerConfig>;
 export type StorageConfig = ConfigType<typeof storageConfig>;
+export type MailConfig = ConfigType<typeof mailConfig>;

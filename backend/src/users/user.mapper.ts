@@ -19,6 +19,8 @@ export function toUserResponse(user: User): UserResponse {
     currency: user.currency,
     locale: user.locale,
     timezone: user.timezone,
+    emailNotifications: user.emailNotifications,
+    emailVerified: user.emailVerifiedAt !== null,
     createdAt: user.createdAt.toISOString(),
   };
 }

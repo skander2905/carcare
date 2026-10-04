@@ -9,7 +9,7 @@ import { IsEmail, IsString, Length, MaxLength } from 'class-validator';
  * is what stops `Sam@example.com` and `sam@example.com` becoming two accounts
  * that both believe they own the address.
  */
-const normaliseEmail = Transform(({ value }: { value: unknown }) =>
+export const normaliseEmail = Transform(({ value }: { value: unknown }) =>
   typeof value === 'string' ? value.trim().toLowerCase() : value,
 );
 

@@ -5,6 +5,7 @@ import { type AuthConfig } from '../config/config.types.js';
 import { type User } from '../prisma/model.types.js';
 import { UsersService } from '../users/users.service.js';
 import { type AccessTokenPayload } from './auth.types.js';
+import { AccountEmailService } from './account-email/account-email.service.js';
 import { dummyPasswordHash, hashPassword, verifyPassword } from './domain/password.js';
 import {
   generateOpaqueToken,
@@ -55,6 +56,7 @@ export class AuthService {
   constructor(
     private readonly users: UsersService,
     private readonly refreshTokens: RefreshTokenRepository,
+    private readonly accountEmail: AccountEmailService,
     private readonly jwt: JwtService,
     @Inject(authConfig.KEY) private readonly auth: AuthConfig,
   ) {}
@@ -70,6 +72,7 @@ export class AuthService {
       passwordHash,
       displayName: dto.displayName,
     });
+    await this.accountEmail.sendVerification(user);
 
     return this.startSession(user, context);
   }

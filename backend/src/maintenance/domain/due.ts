@@ -14,7 +14,7 @@
 export type MaintenanceStatus = 'UNKNOWN' | 'UPCOMING' | 'DUE_SOON' | 'DUE' | 'OVERDUE';
 
 /** Most urgent first. Also the order a vehicle's schedules are listed in. */
-const URGENCY: Record<MaintenanceStatus, number> = {
+export const URGENCY: Record<MaintenanceStatus, number> = {
   OVERDUE: 0,
   DUE: 1,
   DUE_SOON: 2,
@@ -92,10 +92,7 @@ export function dueState({ terms, services, currentOdometerKm, now, timeZone }: 
       : null;
 
   // Whichever comes first: the more urgent of the two dimensions.
-  const known = [km?.status, time?.status].filter((s) => s !== undefined);
-  const status = known.length === 0 ? 'UNKNOWN' : known.reduce((a, b) => (URGENCY[a] <= URGENCY[b] ? a : b));
-
-  return { status, km, time };
+  return { status: mostUrgent([km?.status, time?.status]), km, time };
 }
 
 function kmDue(lastKm: number, intervalKm: number, notifyBeforeKm: number, currentKm: number): KmDue {
@@ -138,6 +135,60 @@ function classify(remaining: number, window: number): Exclude<MaintenanceStatus,
   if (remaining > 0) return 'DUE_SOON';
   if (-remaining < Math.max(window, 1)) return 'DUE';
   return 'OVERDUE';
+}
+
+/**
+ * A fixed due point rather than an interval: "the insurance renews on
+ * 1 March", "the warranty ends at 100,000 km". Used by reminders, which fall
+ * due once; classified by exactly the same rule as a schedule.
+ */
+export interface DuePoint {
+  dueAtKm: number | null;
+  /** YYYY-MM-DD in the owner's time zone. */
+  dueDate: string | null;
+  notifyBeforeKm: number;
+  notifyBeforeDays: number;
+}
+
+export interface PointDueState {
+  /** UNKNOWN only when neither half is set, which the reminders table refuses. */
+  status: MaintenanceStatus;
+  km: { dueAtKm: number; remainingKm: number; status: Exclude<MaintenanceStatus, 'UNKNOWN'> } | null;
+  time: { dueDate: string; remainingDays: number; status: Exclude<MaintenanceStatus, 'UNKNOWN'> } | null;
+}
+
+export function dueAt(
+  point: DuePoint,
+  { currentOdometerKm, now, timeZone }: { currentOdometerKm: number; now: Date; timeZone: string },
+): PointDueState {
+  const km =
+    point.dueAtKm === null
+      ? null
+      : {
+          dueAtKm: point.dueAtKm,
+          remainingKm: point.dueAtKm - currentOdometerKm,
+          status: classify(point.dueAtKm - currentOdometerKm, point.notifyBeforeKm),
+        };
+
+  const time =
+    point.dueDate === null
+      ? null
+      : (() => {
+          const remainingDays = daysBetween(calendarDate(now, timeZone), point.dueDate);
+          return {
+            dueDate: point.dueDate,
+            remainingDays,
+            status: classify(remainingDays, point.notifyBeforeDays),
+          };
+        })();
+
+  return { status: mostUrgent([km?.status, time?.status]), km, time };
+}
+
+/** Most urgent of whichever statuses are known; UNKNOWN when none are. */
+function mostUrgent(statuses: (MaintenanceStatus | undefined)[]): MaintenanceStatus {
+  const known = statuses.filter((s) => s !== undefined);
+  return known.length === 0 ? 'UNKNOWN' : known.reduce((a, b) => (URGENCY[a] <= URGENCY[b] ? a : b));
 }
 
 /** Compares two states for listing: most urgent first, then furthest through its interval. */

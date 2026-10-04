@@ -81,8 +81,26 @@ export const envSchema = z.object({
 
   CORS_ORIGINS: listFromEnv('http://localhost:3000'),
 
-  /** Behind a load balancer this must be on, or rate limiting sees one IP. */
-  TRUST_PROXY: booleanFromEnv(false),
+  /**
+   * How many proxies sit in front of the API, so the caller's own address is
+   * found in X-Forwarded-For. Behind a load balancer this must be set, or rate
+   * limiting sees one IP for everybody. `true` means one hop; a number is the
+   * hop count — online CarCare is two: Vercel's proxy, then Render's.
+   */
+  TRUST_PROXY: z
+    .union([z.boolean(), z.string(), z.number()])
+    .default(false)
+    .transform((value, ctx) => {
+      if (typeof value === 'number') return value;
+      if (typeof value === 'boolean') return value ? 1 : 0;
+      const text = value.trim().toLowerCase();
+      if (/^\d+$/.test(text)) return Number(text);
+      if (['1', 'true', 'yes', 'on'].includes(text)) return 1;
+      if (['', '0', 'false', 'no', 'off'].includes(text)) return 0;
+      ctx.addIssue({ code: 'custom', message: 'TRUST_PROXY must be true, false or a number of proxy hops' });
+      return z.NEVER;
+    })
+    .pipe(z.number().int().min(0).max(10)),
 
   SWAGGER_ENABLED: booleanFromEnv(true),
   SWAGGER_PATH: z.string().default('docs'),

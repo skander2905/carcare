@@ -118,4 +118,13 @@ describe('validateEnv', () => {
       expect(validateEnv({ ...REQUIRED, REFRESH_COOKIE_SECURE: 'true' }).REFRESH_COOKIE_SECURE).toBe(true);
     });
   });
+
+  it('reads TRUST_PROXY as a number of proxy hops', () => {
+    const base = { DATABASE_URL: 'postgres://x', REDIS_URL: 'redis://x', JWT_ACCESS_SECRET: 'x'.repeat(32) };
+    expect(validateEnv({ ...base }).TRUST_PROXY).toBe(0);
+    expect(validateEnv({ ...base, TRUST_PROXY: 'true' }).TRUST_PROXY).toBe(1);
+    expect(validateEnv({ ...base, TRUST_PROXY: 'false' }).TRUST_PROXY).toBe(0);
+    expect(validateEnv({ ...base, TRUST_PROXY: '2' }).TRUST_PROXY).toBe(2);
+    expect(() => validateEnv({ ...base, TRUST_PROXY: 'maybe' })).toThrow(/TRUST_PROXY/);
+  });
 });

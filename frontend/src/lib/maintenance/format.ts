@@ -97,13 +97,23 @@ function timePhrase(remainingDays: number, dueDate: string): string {
 }
 
 /**
+ * What `dueSummary` reads. A schedule's `Due` has more (progress, the last
+ * service); a reminder's fixed due point has exactly this.
+ */
+export interface DueLike {
+  status: MaintenanceStatus;
+  km: { remainingKm: number } | null;
+  time: { remainingDays: number; dueDate: string } | null;
+}
+
+/**
  * One line saying when a service falls due: "In 3,520 km or by 1 Mar 2027".
  *
  * Both dimensions are named when both are tracked, since whichever comes
  * first is the one that counts — and a person reading "in 3,520 km" alone
  * would not know the calendar was about to beat it.
  */
-export function dueSummary(due: Due): string {
+export function dueSummary(due: DueLike): string {
   if (due.status === 'UNKNOWN') return 'Log the last one, or say when it was done, to start tracking';
 
   const parts: string[] = [];

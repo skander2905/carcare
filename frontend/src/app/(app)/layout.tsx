@@ -1,4 +1,5 @@
 import { SiteHeader } from '@/components/layout/site-header';
+import { VerifyEmailBanner } from '@/features/account-email/verify-email-banner';
 import { RequireAuth } from '@/features/auth/require-auth';
 
 /**
@@ -10,6 +11,7 @@ export default function AppLayout({ children }: LayoutProps<'/'>) {
   return (
     <RequireAuth>
       <SiteHeader />
+      <VerifyEmailBanner />
       <main className="flex-1">{children}</main>
     </RequireAuth>
   );

@@ -125,6 +125,7 @@ PATCH  /vehicles/:id
 DELETE /vehicles/:id
 GET    /vehicles/:id/odometer
 POST   /vehicles/:id/odometer
+GET    /vehicles/:id/odometer/context    ?at=&excludeSourceId=   readings either side, usual km/day, last fill-up
 ```
 
 ### Costs

@@ -118,6 +118,20 @@ describe('Account emails: confirming an address, resetting a password (e2e)', ()
     });
   });
 
+  it('says so when email is not set up, instead of pretending it sent', async () => {
+    const { accessToken } = await register();
+    outbox.enabled = false;
+    try {
+      const { body } = await api()
+        .post('/api/v1/auth/email/verify/resend')
+        .set('Authorization', `Bearer ${accessToken}`)
+        .expect(503);
+      expect((body as { message: string }).message).toMatch(/isn't set up/);
+    } finally {
+      outbox.enabled = true;
+    }
+  });
+
   describe('forgotten passwords', () => {
     it('answers the same for an address with no account, and sends nothing', async () => {
       await api().post('/api/v1/auth/password/forgot').send({ email: 'nobody@example.com' }).expect(202, {});

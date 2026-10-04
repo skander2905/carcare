@@ -5,6 +5,7 @@ import {
   ApiBearerAuth,
   ApiOkResponse,
   ApiOperation,
+  ApiServiceUnavailableResponse,
   ApiTags,
   ApiTooManyRequestsResponse,
 } from '@nestjs/swagger';
@@ -48,6 +49,7 @@ export class AccountEmailController {
   @ApiOperation({ summary: 'Send the confirmation email again; nothing happens once confirmed' })
   @ApiAcceptedResponse()
   @ApiTooManyRequestsResponse({ type: ApiErrorResponse })
+  @ApiServiceUnavailableResponse({ type: ApiErrorResponse, description: 'No mail transport configured.' })
   async resend(@CurrentUser() user: AuthenticatedUser): Promise<void> {
     await this.accountEmail.resendVerification(user.id);
   }

@@ -583,8 +583,10 @@ address, and reminders would then be mailed to a stranger.
 **Decision — nothing is emailed to an unconfirmed address.** Sign-up sends a
 confirmation link; reminders reach the in-app inbox regardless, but are only
 emailed once `emailVerifiedAt` is set. A Google sign-up counts as confirmed
-(the provider only returns verified addresses, ADR-017); existing Google-made
-accounts were back-filled by the migration, password accounts were not.
+(the provider only returns verified addresses, ADR-017), and so does signing in
+with or connecting Google whose address matches the account's. Existing
+accounts in either situation were back-filled; other password accounts must
+click the link.
 
 **Decision — links are single-use random tokens.** 256 bits, stored as SHA-256
 like refresh tokens, spent with a conditional update so two clicks cannot both
@@ -601,6 +603,9 @@ non-expiring link (derived from the access-token key) and RFC 8058
 `List-Unsubscribe` headers, so Gmail shows its own button. The endpoint is POST
 only; the link in the body opens a page with a button, because mail scanners
 open links.
+
+Asking for the link again when the server has no email set up answers 503
+with a plain message, rather than "sent" with nothing sent.
 
 **Decision — SMTP, chosen by configuration.** One transport speaks to Mailpit
 locally, Gmail with an app password while the app has no domain of its own,

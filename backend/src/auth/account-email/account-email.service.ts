@@ -1,4 +1,4 @@
-import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { mailConfig } from '../../config/configuration.js';
 import { type MailConfig } from '../../config/config.types.js';
 import { type EmailTokenPurpose } from '../../generated/prisma/enums.js';
@@ -53,7 +53,16 @@ export class AccountEmailService {
     );
   }
 
+  /**
+   * Asked for by a person waiting for the email, so unlike the automatic sends
+   * it says when nothing can go out — rather than "sent" with nothing sent.
+   */
   async resendVerification(userId: string): Promise<void> {
+    if (!this.mailer.enabled) {
+      throw new ServiceUnavailableException(
+        "Email isn't set up on this server yet, so the link can't be sent.",
+      );
+    }
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     await this.sendVerification(user);
   }

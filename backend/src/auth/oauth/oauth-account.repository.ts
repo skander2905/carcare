@@ -58,6 +58,17 @@ export class OAuthAccountRepository {
     });
   }
 
+  /**
+   * The provider only hands over an address it has verified (ADR-017). When
+   * that is the account's own address, the person has proved they read it.
+   */
+  async confirmEmailIfMatches(userId: string, providerEmail: string): Promise<void> {
+    await this.prisma.user.updateMany({
+      where: { id: userId, email: providerEmail.toLowerCase(), emailVerifiedAt: null },
+      data: { emailVerifiedAt: new Date() },
+    });
+  }
+
   /** Records the address the provider last reported, for display only. */
   async touchEmail(id: string, email: string | undefined): Promise<void> {
     await this.prisma.oAuthAccount.update({ where: { id }, data: { email: email ?? null } });

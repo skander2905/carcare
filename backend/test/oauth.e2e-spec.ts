@@ -331,6 +331,54 @@ describe('OAuth sign-in (e2e)', () => {
       expect(response.body.message).toMatch(/only way to sign in/i);
     });
 
+    it('confirms the email of an account that connects Google with the same address', async () => {
+      const registered = await request(server())
+        .post('/api/v1/auth/register')
+        .send({ email: 'oauth-user@example.com', password: PASSWORD, displayName: 'Password Sam' })
+        .expect(201);
+      const token = (registered.body as { accessToken: string; user: { emailVerified: boolean } })
+        .accessToken;
+      expect((registered.body as { user: { emailVerified: boolean } }).user.emailVerified).toBe(false);
+
+      const started = await request(server())
+        .get('/api/v1/auth/oauth/google/link')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      const state = new URL((started.body as { authorizationUrl: string }).authorizationUrl).searchParams.get(
+        'state',
+      )!;
+      await callback({ state, nonce: findCookie(started.headers, NONCE_COOKIE)!.value }).expect(302);
+
+      const me = await request(server())
+        .get('/api/v1/auth/me')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      expect((me.body as { emailVerified: boolean }).emailVerified).toBe(true);
+    });
+
+    it('leaves the email unconfirmed when the Google address differs', async () => {
+      const registered = await request(server())
+        .post('/api/v1/auth/register')
+        .send({ email: 'someone-else@example.com', password: PASSWORD, displayName: 'Password Sam' })
+        .expect(201);
+      const token = (registered.body as { accessToken: string }).accessToken;
+
+      const started = await request(server())
+        .get('/api/v1/auth/oauth/google/link')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      const state = new URL((started.body as { authorizationUrl: string }).authorizationUrl).searchParams.get(
+        'state',
+      )!;
+      await callback({ state, nonce: findCookie(started.headers, NONCE_COOKIE)!.value }).expect(302);
+
+      const me = await request(server())
+        .get('/api/v1/auth/me')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      expect((me.body as { emailVerified: boolean }).emailVerified).toBe(false);
+    });
+
     it('rejects an unknown provider name', async () => {
       const token = await signIn();
 

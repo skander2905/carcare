@@ -171,7 +171,10 @@ export class OAuthService {
       if (existing.email !== identity.email) {
         await this.accounts.touchEmail(existing.id, identity.email);
       }
-      return this.auth.startSessionFor(existing.user, context);
+      await this.accounts.confirmEmailIfMatches(existing.userId, identity.email);
+      // Re-read, so the session's user says "confirmed" straight away.
+      const user = (await this.users.findById(existing.userId)) ?? existing.user;
+      return this.auth.startSessionFor(user, context);
     }
 
     const byEmail = await this.users.findByEmail(identity.email);
@@ -180,8 +183,8 @@ export class OAuthService {
       /*
        * Refuse rather than merge.
        *
-       * This API has no email verification yet, so a local account's address is
-       * unproven: anyone can register as someone else's address. Auto-linking on
+       * A local account's address may be unconfirmed: anyone can register as
+       * someone else's address. Auto-linking on
        * a matching email would therefore hand the squatter a shared account with
        * the real owner the moment the owner signed in with Google. Linking is
        * only safe from a session that has already proved it owns the account.
@@ -221,5 +224,6 @@ export class OAuthService {
       providerAccountId: identity.providerAccountId,
       email: identity.email,
     });
+    await this.accounts.confirmEmailIfMatches(userId, identity.email);
   }
 }

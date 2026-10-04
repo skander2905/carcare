@@ -616,3 +616,39 @@ at start-up and log a clear error if it refuses.
 so authenticated sending from a provider needs a domain the project owns.
 Changing one's email address still has no flow; when it gets one, it must clear
 `emailVerifiedAt` and send a new link.
+
+## ADR-022 — Mileage entry: complete, check, suggest — never guess silently
+
+**Context.** Every record that carries a mileage asked for the whole reading,
+six digits typed on a phone. One wrong digit passes validation when it still
+fits the timeline, and corrupts consumption and every km-based due date.
+
+**Decision — type the end, see the whole.** Fewer digits than the previous
+reading are its end: the reading is the first number at or above the previous
+one ending that way, as an odometer's wheels roll (after 122,700, "050" is
+123,050). As many digits or more are a full number. Digit grouping works on the
+text, so a leading zero survives. The full reading is always written out under
+the box, with the distance since the previous reading.
+
+**Decision — say what looks wrong before the server does.** Below the previous
+reading or above the next is shown as the error the server would return; more
+than 1,500 km a day since the previous reading passes but is flagged as a
+probable typo.
+
+**Decision — offer, never fill.** A suggestion from the car's usual pace
+(six months of readings, at least 14 days apart, else nothing), the trip
+counter added to the last fill-up's reading (fuel only), +/- buttons, and
+numbers read from a dashboard photo. Each needs a tap — the rule from Phase 5
+that a wrong guess must not pass silently still holds.
+
+**Decision — the photo is read on the phone.** Tesseract.js in a Web Worker;
+the photo never leaves the device. Its engine and English data come from the
+jsDelivr CDN on first use. It misreads segment displays, so its output is
+reduced to numbers that fit between the neighbouring readings and offered as
+buttons. "Sparse text" layout returned nothing at all on a clean test image;
+automatic layout is used. Rejected: a vision API (cost, a key, and the photo
+leaving the device — Skander's choice).
+
+**Consequences.** One small endpoint, `GET /vehicles/:id/odometer/context`,
+which leaves out the record being edited so it is not compared with itself.
+Self-hosting the OCR files is a Phase 12 item if the CDN dependency matters.

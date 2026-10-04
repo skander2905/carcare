@@ -14,7 +14,7 @@ a working, tested state. Status is updated as phases land.
 | 6     | **Maintenance** — records, schedules, due/overdue engine                                                                  | ✅ Done |
 | 7     | **Reminders & jobs** — BullMQ queues, worker role, notifications, account emails                                          | ✅ Done |
 | 7b    | **Easier mileage entry** — rethink how the odometer is entered across the forms (requested 2026-10-03; to be scoped)      | ⬜ Next |
-| 8     | **Documents** — expiry tracking, vehicle-level documents (upload/download landed in 4b)                                   | ⬜      |
+| 8     | **Documents** — expiry tracking, vehicle-level documents (upload/download landed in 4b)                                   | ⬜ Next |
 | 9     | **Analytics** — dashboard, charts, cost/km, total cost of ownership                                                       | ⬜      |
 | 10    | **Trips** — trip log and estimated trip cost                                                                              | ⬜      |
 | 11    | **Testing** — integration coverage, Playwright E2E journeys                                                               | ⬜      |
@@ -439,20 +439,38 @@ plugs is one record against one schedule).
 unconfirmed uploads (declined for this phase), changing one's email address,
 and deleting a notification.
 
-## Phase 7b — easier mileage entry (to be scoped)
+## Phase 7b — easier mileage entry — delivered
 
-Requested by Skander on 2026-10-03: the kilometrage input is awkward to use
-and needs its own feature. Today every form that takes a mileage (expense,
-fuel, maintenance, odometer reading) has a plain number field. The current
-reading is shown as a hint and never prefilled, because a wrong guess would
-pass validation silently.
+Asked for by Skander: typing six digits on a phone was slow, and a wrong digit
+slipped through. One `MileageInput` now serves the fuel, service and expense
+forms and the odometer timeline (ADR-022).
 
-To settle before building: what exactly feels wrong (typing a six-digit
-number on a phone, not knowing the last reading, the validation messages),
-and which direction to take. Candidates: a field seeded with the last
-reading's leading digits, a "+ km since last time" mode, a stepper or chips
-for the trip distance, or reading the dashboard from a photo (OCR, deferred
-elsewhere by design).
+- **Type only the end.** After 122,700 km, "980" means 122,980 and "050" means
+  123,050. The full reading is always written out underneath.
+- **Mistakes are named as you type.** "+412 km since 28 Sep"; lower than the
+  last reading is refused with the reading named; over 1,500 km a day is
+  flagged as a probable typo.
+- **Trip counter** at a fill-up: the trip km plus the last fill-up's reading.
+- **Suggestions you tap, never silent guesses:** "About 122,970 km?" from the
+  car's usual pace, and −10/+10/+100.
+- **Dashboard photo**, read on the phone by Tesseract.js; numbers that fit the
+  car are offered as buttons.
+- `GET /vehicles/:id/odometer/context`: the readings either side of a moment,
+  the usual km/day over six months, the last fill-up.
+- 3 unit and 4 integration tests on the backend, 13 on the frontend.
+
+**Fixed during verification.** The first digit grouping formatted the text as a
+number and turned "050" into "50", which would have broken typing past a
+thousand. Tesseract's "sparse text" mode returned nothing at all on a clean
+test image; checked against a drawn dashboard (clock, temperature, trip
+counter and "122 980"), automatic layout reads the mileage and the filter
+drops the rest.
+
+**Verified in the running app** with a throwaway account: every route through
+the box in the fuel form, a fill-up saved from the trip counter, the photo
+button on a drawn dashboard, and the box on the other three forms. The account
+and its car were deleted afterwards. **Not verified:** a real photo of a real
+dashboard, and the layout on a phone screen (the browser pane was hidden).
 
 ## Deferred by design
 

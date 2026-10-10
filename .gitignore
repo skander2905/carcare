@@ -43,3 +43,6 @@ pnpm-debug.log*
 backend/.agents/
 backend/.windsurf/
 backend/skills-lock.json
+
+# Written by `vercel link`: the local project link and its pulled env.
+.vercel

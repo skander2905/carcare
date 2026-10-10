@@ -67,6 +67,13 @@ services:
         sync: false
       - key: S3_FORCE_PATH_STYLE
         value: 'true'
+      # Optional "Continue with Google". Set both or neither: with neither the
+      # button is hidden; with one, the API refuses to boot. See docs/deploy.md,
+      # step 7.
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
       # No SMTP here: Render's free plan blocks outgoing email ports (25, 465,
       # 587) since September 2025, so email stays off and reminders reach the
       # in-app inbox only. See docs/deploy.md, "Email later".

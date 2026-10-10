@@ -99,6 +99,8 @@ The site loads, but signing in fails until the API is up (step 4).
    | `S3_BUCKET`            | your bucket's name, from step 2                         |
    | `S3_ACCESS_KEY_ID`     | from step 2                                             |
    | `S3_SECRET_ACCESS_KEY` | from step 2                                             |
+   | `GOOGLE_CLIENT_ID`     | leave empty for now, see step 7                         |
+   | `GOOGLE_CLIENT_SECRET` | leave empty for now, see step 7                         |
 4. **Apply**. The first build takes 5 to 10 minutes. In `carcare-api` → **Logs**,
    wait for:
    - `All migrations have been successfully applied` (the database is set up)
@@ -152,7 +154,39 @@ can't check reminders. A small GitHub job wakes it every 10 minutes.
 GitHub pauses scheduled jobs in a repository with no commits for 60 days. If
 that happens, the Actions tab shows a button to turn it back on.
 
-## 7. Try it
+## 7. Sign in with Google (optional)
+
+Without this, people sign in with an email and password only. With it, the
+login page also shows **Continue with Google**.
+
+1. https://console.cloud.google.com → create a project, e.g. `carcare`. Then
+   open **Google Auth Platform** (in French: **Écran de consentement OAuth**).
+2. **Branding**: app name `CarCare`, your email for support and contact.
+   Under **Authorized domains**, add your website's own domain, e.g.
+   `carcare-abc.vercel.app`. Google refuses plain `vercel.app`, which every
+   Vercel site shares.
+3. **Audience**: leave the status on **Testing**, and under **Test users** add
+   the Gmail of everyone who will sign in. Anyone else sees "Access blocked".
+4. **Clients → Create client**:
+   - Application type: **Web application**
+   - Authorized redirect URIs: your website address +
+     `/api/v1/auth/oauth/google/callback`, e.g.
+     `https://carcare-abc.vercel.app/api/v1/auth/oauth/google/callback`.
+     It is the website, not Render: the API is reached through it.
+
+   Copy the **Client ID** and **Client secret**. The secret may be shown only once.
+
+5. Render → `carcare-api` → **Environment**: set `GOOGLE_CLIENT_ID` and
+   `GOOGLE_CLIENT_SECRET`, then **Save, rebuild, and deploy**. Set both: with
+   only one, the API refuses to start.
+6. Check: `https://<your website>/api/v1/auth/providers` should answer
+   `[{"slug":"google","displayName":"Google"}]`.
+
+If someone already has a password account with the same Gmail, CarCare won't
+merge them on its own (ADR-017 in `docs/decisions.md`): they sign in with the
+password, then link Google from **Settings**.
+
+## 8. Try it
 
 Open your website address on your phone and **create your account**. The
 online app starts empty; your computer's data stays on your computer.

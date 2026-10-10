@@ -38,13 +38,22 @@ const CAPABILITIES: { title: string; description: string; Icon: ComponentType<{ 
   },
 ];
 
+// The API health card is a developer's tool: visitors online have no use for it.
+const showSystemStatus = process.env.NODE_ENV === 'development';
+
 export default function HomePage() {
   return (
     <>
       <SiteHeader />
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 sm:px-6">
-        <section className="grid gap-10 py-16 lg:grid-cols-[1.15fr_1fr] lg:items-center lg:gap-16 lg:py-24">
+        <section
+          className={
+            showSystemStatus
+              ? 'grid gap-10 py-16 lg:grid-cols-[1.15fr_1fr] lg:items-center lg:gap-16 lg:py-24'
+              : 'py-16 lg:py-24'
+          }
+        >
           <div className="space-y-6">
             <p className="text-muted-foreground text-sm font-medium uppercase tracking-wide">
               Personal vehicle management
@@ -58,7 +67,7 @@ export default function HomePage() {
             </p>
           </div>
 
-          <SystemStatusCard />
+          {showSystemStatus ? <SystemStatusCard /> : null}
         </section>
 
         <section aria-labelledby="capabilities" className="pb-20">

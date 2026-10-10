@@ -64,6 +64,7 @@ You'll come back in step 5 to allow uploads from your website's address.
 2. **Add New → Project**, and import `skander2905/carcare`.
 3. **Root Directory**: click **Edit** and choose `frontend`. Vercel detects Next.js.
 4. **Environment Variables**, add:
+
    | Name                   | Value                              |
    | ---------------------- | ---------------------------------- |
    | `NEXT_PUBLIC_API_URL`  | `same-origin`                      |
@@ -73,6 +74,7 @@ You'll come back in step 5 to allow uploads from your website's address.
    `API_PROXY_TARGET` is a placeholder until step 4 gives the real address.
    It must start with `https://`, or the build fails with "Invalid rewrites
    found".
+
 5. **Deploy**. When it finishes, note your address, for example
    `https://carcare-abc.vercel.app` → this is your **website address**.
    (Settings → Domains lets you pick a nicer `something.vercel.app` name.)

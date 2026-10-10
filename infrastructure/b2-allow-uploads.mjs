@@ -43,7 +43,8 @@ const corsRules = [
     corsRuleName: 'carcare-web',
     allowedOrigins: [origin],
     // Upload (PUT), view (GET) and the browser's own checks (HEAD). Nothing else.
-    allowedOperations: ['s3_put_object', 's3_get_object', 's3_head_object'],
+    // B2's names for the S3 operations; it rejects the S3 API's own names.
+    allowedOperations: ['s3_put', 's3_get', 's3_head'],
     // The upload is signed for exactly this header (ADR-009).
     allowedHeaders: ['content-type'],
     exposeHeaders: ['etag'],

@@ -18,8 +18,9 @@ services:
     dockerfilePath: ./backend/Dockerfile
     dockerContext: .
     # Free services have no pre-deploy step, so migrations run at start-up.
-    # `migrate deploy` only applies what is new, and takes an advisory lock.
-    dockerCommand: sh -c "node_modules/.bin/prisma migrate deploy && exec node dist/main.js"
+    # Render splits this on spaces and ignores quotes, so the commands live in
+    # a script rather than an inline `sh -c "..."`.
+    dockerCommand: sh scripts/migrate-and-start.sh
     healthCheckPath: /health/live
     autoDeploy: true
     envVars:

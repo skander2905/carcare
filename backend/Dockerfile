@@ -54,6 +54,9 @@ COPY --from=prune --chown=node:node /app/backend/node_modules ./backend/node_mod
 COPY --from=build --chown=node:node /app/backend/dist ./backend/dist
 COPY --from=build --chown=node:node /app/backend/package.json ./backend/package.json
 COPY --from=build --chown=node:node /app/backend/prisma.config.ts ./backend/prisma.config.ts
+# prisma.config.ts imports this one source file to find the .env files.
+COPY --from=build --chown=node:node /app/backend/src/config/env-files.ts ./backend/src/config/env-files.ts
+COPY --from=build --chown=node:node /app/backend/scripts ./backend/scripts
 # Migrations ship with the image so `prisma migrate deploy` is runnable at release time.
 COPY --from=build --chown=node:node /app/backend/prisma ./backend/prisma
 
